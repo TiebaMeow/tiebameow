@@ -15,7 +15,7 @@ from sqlalchemy import BIGINT, JSON, DateTime, Index, Integer, String, Text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
-from sqlalchemy.types import TypeDecorator
+from sqlalchemy.types import TypeDecorator, TypeEngine
 
 from ..schemas.fragments import FRAG_MAP, Fragment, FragUnknownModel
 from ..utils.time_utils import SHANGHAI_TZ, now_with_tz
@@ -25,8 +25,9 @@ if TYPE_CHECKING:
 
     import aiotieba.api.get_posts._classdef as aiotieba_posts
     import aiotieba.typing as aiotieba
+    from sqlalchemy.engine.interfaces import Dialect
 
-    AiotiebaType = aiotieba.Thread | aiotieba.Post | aiotieba.Comment
+    type AiotiebaType = aiotieba.Thread | aiotieba.Post | aiotieba.Comment
 
 
 __all__ = [
@@ -43,7 +44,7 @@ class Base(DeclarativeBase):
     pass
 
 
-class FragmentListType(TypeDecorator):
+class FragmentListType(TypeDecorator[list[Fragment]]):
     """自动处理Fragment模型列表的JSON序列化与反序列化。
 
     自动适配不同数据库的JSON类型。
@@ -52,22 +53,22 @@ class FragmentListType(TypeDecorator):
     impl = JSON
     cache_ok = True
 
-    def __init__(self, fallback: Callable[[], Fragment] | None = None, *args, **kwargs):
+    def __init__(self, fallback: Callable[[], Fragment] | None = None, *args: object, **kwargs: object):
         super().__init__(*args, **kwargs)
-        self.adapter = TypeAdapter(Fragment)
+        self.adapter: TypeAdapter[Fragment] = TypeAdapter(Fragment)
         self.fallback = fallback
 
-    def load_dialect_impl(self, dialect):
+    def load_dialect_impl(self, dialect: Dialect) -> TypeEngine[Any]:
         if dialect.name == "postgresql":
             return dialect.type_descriptor(JSONB())
         return dialect.type_descriptor(JSON())
 
-    def process_bind_param(self, value: list[Fragment] | None, dialect) -> list[dict[str, Any]] | None:
+    def process_bind_param(self, value: list[Fragment] | None, dialect: Dialect) -> list[dict[str, Any]] | None:
         if value is None:
             return None
         return [self.adapter.dump_python(item, mode="json") for item in value]
 
-    def process_result_value(self, value: list[dict[str, Any]] | None, dialect) -> list[Fragment] | None:
+    def process_result_value(self, value: list[dict[str, Any]] | None, dialect: Dialect) -> list[Fragment] | None:
         if value is None:
             return None
         return [self._validate(item) for item in value]

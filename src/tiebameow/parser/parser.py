@@ -11,7 +11,7 @@ from ..utils.time_utils import SHANGHAI_TZ
 if TYPE_CHECKING:
     import aiotieba.typing as aiotieba
 
-    AiotiebaType = aiotieba.Thread | aiotieba.Post | aiotieba.Comment
+    type AiotiebaType = aiotieba.Thread | aiotieba.Post | aiotieba.Comment
 
 
 def convert_aiotieba_fragment(obj: AiotiebaType) -> Fragment:

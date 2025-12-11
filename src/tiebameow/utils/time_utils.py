@@ -4,7 +4,7 @@ from zoneinfo import ZoneInfo
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
 
-def now_with_tz():
+def now_with_tz() -> datetime:
     """返回带时区的当前时间。
 
     Returns:

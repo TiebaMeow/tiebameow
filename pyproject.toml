@@ -9,6 +9,7 @@ readme = "README.md"
 license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
+    "aiotieba>=4.6.1",
     "pydantic>=2.12.5",
 ]
 keywords = ["tieba"]
@@ -54,6 +55,7 @@ warn_unused_ignores = true
 warn_no_return = true
 warn_unreachable = true
 strict_equality = true
+disable_error_code = ["import-untyped"]
 
 [tool.pytest.ini_options]
 addopts = "--strict-config --strict-markers"

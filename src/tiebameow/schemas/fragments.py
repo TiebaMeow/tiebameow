@@ -84,7 +84,7 @@ class FragLinkModel(BaseModel):
 
     @field_validator("raw_url", mode="before")
     @classmethod
-    def _coerce_raw_url(cls, v):
+    def _coerce_raw_url(cls, v: str | None) -> str:
         return "" if v is None else str(v)
 
 
@@ -115,7 +115,7 @@ class FragTiebaPlusModel(BaseModel):
 
     @field_validator("url", mode="before")
     @classmethod
-    def _coerce_url(cls, v):
+    def _coerce_url(cls, v: str | None) -> str:
         return "" if v is None else str(v)
 
 
