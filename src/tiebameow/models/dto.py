@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from typing import Literal
+from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-if TYPE_CHECKING:
-    from datetime import datetime
-
-    from ..schemas.fragments import Fragment
+from ..schemas.fragments import Fragment
 
 
 class UserDTO(BaseModel):
