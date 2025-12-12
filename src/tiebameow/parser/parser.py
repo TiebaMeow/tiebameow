@@ -13,12 +13,29 @@ if TYPE_CHECKING:
     import aiotieba.api.get_threads
     import aiotieba.api.get_posts
     import aiotieba.api.get_comments
+    import aiotieba.api._classdef.contents
 
     type AiotiebaType = aiotieba.typing.Thread | aiotieba.typing.Post | aiotieba.typing.Comment
-    type AiotiebaUserType = aiotieba.api.get_threads.UserInfo_t | aiotieba.api.get_posts.UserInfo_p | aiotieba.api.get_comments.UserInfo_c
+    type AiotiebaFragType = (
+        aiotieba.api._classdef.contents.FragText
+        | aiotieba.api._classdef.contents.FragEmoji
+        | aiotieba.api._classdef.contents.FragImage
+        | aiotieba.api._classdef.contents.FragAt
+        | aiotieba.api._classdef.contents.FragVoice
+        | aiotieba.api._classdef.contents.FragVideo
+        | aiotieba.api._classdef.contents.FragLink
+        | aiotieba.api._classdef.contents.FragTiebaPlus
+        | aiotieba.api._classdef.contents.FragItem
+        | aiotieba.api._classdef.contents.FragUnknown
+    )
+    type AiotiebaUserType = (
+        aiotieba.api.get_threads.UserInfo_t
+        | aiotieba.api.get_posts.UserInfo_p
+        | aiotieba.api.get_comments.UserInfo_c
+    )
 
 
-def convert_aiotieba_fragment(obj: AiotiebaType) -> Fragment:
+def convert_aiotieba_fragment(obj: AiotiebaFragType | Any) -> Fragment:
     source_type_name = type(obj).__name__
     target_model_name = source_type_name.rsplit("_", 1)[0]
 
@@ -31,7 +48,7 @@ def convert_aiotieba_fragment(obj: AiotiebaType) -> Fragment:
     return target_model(**data_dict)
 
 
-def convert_aiotieba_content_list(contents: list[Any]) -> list[Fragment]:
+def convert_aiotieba_content_list(contents: list[AiotiebaFragType | Any]) -> list[Fragment]:
     if not contents:
         return []
     return [convert_aiotieba_fragment(frag) for frag in contents]
