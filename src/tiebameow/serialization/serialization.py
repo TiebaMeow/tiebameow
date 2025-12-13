@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Literal, Mapping, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from ..models.dto import CommentDTO, PostDTO, ThreadDTO
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
 
 __all__ = [
     "serialize",
@@ -85,18 +88,15 @@ def deserialize_comment(data: Mapping[str, Any]) -> CommentDTO:
 
 
 @overload
-def deserialize(item_type: Literal["thread"], data: Mapping[str, Any]) -> ThreadDTO:
-    ...
+def deserialize(item_type: Literal["thread"], data: Mapping[str, Any]) -> ThreadDTO: ...
 
 
 @overload
-def deserialize(item_type: Literal["post"], data: Mapping[str, Any]) -> PostDTO:
-    ...
+def deserialize(item_type: Literal["post"], data: Mapping[str, Any]) -> PostDTO: ...
 
 
 @overload
-def deserialize(item_type: Literal["comment"], data: Mapping[str, Any]) -> CommentDTO:
-    ...
+def deserialize(item_type: Literal["comment"], data: Mapping[str, Any]) -> CommentDTO: ...
 
 
 def deserialize(

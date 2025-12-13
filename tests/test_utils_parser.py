@@ -1,18 +1,18 @@
 import dataclasses
-from typing import Any, List
+from typing import Any
 
+from tiebameow.models.dto import CommentDTO, PostDTO, ThreadDTO, UserDTO
 from tiebameow.parser.parser import (
-    convert_aiotieba_fragment,
-    convert_aiotieba_user,
-    convert_aiotieba_thread,
-    convert_aiotieba_post,
     convert_aiotieba_comment,
+    convert_aiotieba_fragment,
+    convert_aiotieba_post,
+    convert_aiotieba_thread,
+    convert_aiotieba_user,
 )
-from tiebameow.models.dto import ThreadDTO, PostDTO, CommentDTO, UserDTO
-from tiebameow.schemas.fragments import FragTextModel, FragImageModel
-
+from tiebameow.schemas.fragments import FragImageModel, FragTextModel
 
 # --- Mocks for aiotieba classes ---
+
 
 @dataclasses.dataclass
 class FragText_t:
@@ -57,7 +57,7 @@ class MockUser:
     glevel: int = 1
     ip: str = "127.0.0.1"
     gender: Any = dataclasses.field(default_factory=MockGender)
-    icons: List[str] = dataclasses.field(default_factory=list)
+    icons: list[str] = dataclasses.field(default_factory=list)
     is_bawu: bool = False
     is_vip: bool = False
     is_god: bool = False
@@ -67,7 +67,7 @@ class MockUser:
 
 @dataclasses.dataclass
 class MockContents:
-    objs: List[Any]
+    objs: list[Any]
 
 
 @dataclasses.dataclass
@@ -148,6 +148,7 @@ class MockComment:
 
 # --- Tests ---
 
+
 def test_convert_aiotieba_fragment() -> None:
     # Test Text Fragment
     frag_text = FragText_t(text="Hello")
@@ -164,7 +165,7 @@ def test_convert_aiotieba_fragment() -> None:
         origin_size=1024,
         show_width=100,
         show_height=100,
-        hash="abc"
+        hash="abc",
     )
     result = convert_aiotieba_fragment(frag_img)
     assert isinstance(result, FragImageModel)
@@ -175,7 +176,6 @@ def test_convert_aiotieba_fragment() -> None:
     # FragUnknown_t -> FragUnknown -> FragUnknownModel
     # This test is skipped because of potential mismatch in fields (proto vs raw_data)
     # which needs to be resolved in the implementation or confirmed.
-    pass
 
 
 def test_convert_aiotieba_user() -> None:

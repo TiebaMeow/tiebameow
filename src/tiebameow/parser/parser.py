@@ -10,29 +10,26 @@ from ..utils.time_utils import SHANGHAI_TZ
 
 if TYPE_CHECKING:
     import aiotieba
-    import aiotieba.api.get_threads
-    import aiotieba.api.get_posts
-    import aiotieba.api.get_comments
-    import aiotieba.api._classdef.contents
+    from aiotieba.api._classdef.contents import (
+        FragAt,
+        FragEmoji,
+        FragImage,
+        FragItem,
+        FragLink,
+        FragText,
+        FragTiebaPlus,
+        FragUnknown,
+        FragVideo,
+    )
+    from aiotieba.api.get_comments import UserInfo_c
+    from aiotieba.api.get_posts import UserInfo_p
+    from aiotieba.api.get_threads import ShareThread, UserInfo_t
 
     type AiotiebaType = aiotieba.typing.Thread | aiotieba.typing.Post | aiotieba.typing.Comment
     type AiotiebaFragType = (
-        aiotieba.api._classdef.contents.FragText
-        | aiotieba.api._classdef.contents.FragEmoji
-        | aiotieba.api._classdef.contents.FragImage
-        | aiotieba.api._classdef.contents.FragAt
-        | aiotieba.api._classdef.contents.FragVoice
-        | aiotieba.api._classdef.contents.FragVideo
-        | aiotieba.api._classdef.contents.FragLink
-        | aiotieba.api._classdef.contents.FragTiebaPlus
-        | aiotieba.api._classdef.contents.FragItem
-        | aiotieba.api._classdef.contents.FragUnknown
+        FragAt | FragEmoji | FragImage | FragItem | FragLink | FragText | FragTiebaPlus | FragUnknown | FragVideo
     )
-    type AiotiebaUserType = (
-        aiotieba.api.get_threads.UserInfo_t
-        | aiotieba.api.get_posts.UserInfo_p
-        | aiotieba.api.get_comments.UserInfo_c
-    )
+    type AiotiebaUserType = UserInfo_t | UserInfo_p | UserInfo_c
 
 
 def convert_aiotieba_fragment(obj: AiotiebaFragType | Any) -> Fragment:
@@ -73,7 +70,7 @@ def convert_aiotieba_user(user: AiotiebaUserType) -> UserDTO:
     )
 
 
-def convert_aiotieba_share_thread(share_thread: aiotieba.api.get_threads.ShareThread) -> ShareThreadDTO:
+def convert_aiotieba_share_thread(share_thread: ShareThread) -> ShareThreadDTO:
     return ShareThreadDTO(
         pid=share_thread.pid,
         tid=share_thread.tid,
