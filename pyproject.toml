@@ -1,7 +1,3 @@
-[build-system]
-requires = ["hatchling>=1.27", "uv-dynamic-versioning>=0.8"]
-build-backend = "hatchling.build"
-
 [project]
 name = "tiebameow"
 description = "Shared library for TiebaMeow services"
@@ -62,6 +58,10 @@ disable_error_code = ["import-untyped"]
 addopts = "--strict-config --strict-markers"
 asyncio_mode = "strict"
 
+[build-system]
+requires = ["hatchling>=1.27", "uv-dynamic-versioning>=0.8"]
+build-backend = "hatchling.build"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/tiebameow"]
 
@@ -82,5 +82,3 @@ source = "uv-dynamic-versioning"
 vcs = "git"
 style = "pep440"
 fallback-version = "0.0.0"
-
-
