@@ -1,9 +1,10 @@
 from datetime import datetime
+from functools import cached_property
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..schemas.fragments import Fragment
+from ..schemas.fragments import Fragment, TypeFragText
 
 
 class UserDTO(BaseModel):
@@ -75,6 +76,11 @@ class ThreadDTO(BaseModel):
     tab_id: int
     share_origin: ShareThreadDTO
 
+    @cached_property
+    def text(self) -> str:
+        text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
+        return text
+
 
 class PostDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -100,6 +106,11 @@ class PostDTO(BaseModel):
 
     floor: int
 
+    @cached_property
+    def text(self) -> str:
+        text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
+        return text
+
 
 class CommentDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -123,3 +134,8 @@ class CommentDTO(BaseModel):
     create_time: datetime
 
     floor: int
+
+    @cached_property
+    def text(self) -> str:
+        text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
+        return text

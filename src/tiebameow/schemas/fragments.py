@@ -1,4 +1,4 @@
-from typing import Literal, get_args
+from typing import Literal, Protocol, get_args, runtime_checkable
 
 from pydantic import BaseModel, field_validator
 
@@ -174,6 +174,12 @@ Fragment = (
     | FragVoiceModel
     | FragUnknownModel
 )
+
+
+@runtime_checkable
+class TypeFragText(Protocol):
+    text: str
+
 
 FRAG_MAP: dict[str, type[Fragment]] = {
     key: cls

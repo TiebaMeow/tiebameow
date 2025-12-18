@@ -6,8 +6,6 @@
 
 from __future__ import annotations
 
-import dataclasses
-from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter, ValidationError
@@ -18,14 +16,16 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, rela
 from sqlalchemy.types import TypeDecorator, TypeEngine
 
 from ..schemas.fragments import FRAG_MAP, Fragment, FragUnknownModel
-from ..utils.time_utils import SHANGHAI_TZ, now_with_tz
+from ..utils.time_utils import now_with_tz
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+    from datetime import datetime
 
-    import aiotieba.api.get_posts._classdef as aiotieba_posts
     import aiotieba.typing as aiotieba
     from sqlalchemy.engine.interfaces import Dialect
+
+    from .dto import CommentDTO, PostDTO, ThreadDTO, UserDTO
 
     type AiotiebaType = aiotieba.Thread | aiotieba.Post | aiotieba.Comment
 
@@ -106,53 +106,6 @@ class MixinBase(Base):
         return result
 
 
-class AiotiebaConvertible:
-    """
-    为可以从aiotieba对象转换的模型定义一个通用接口的抽象基类。
-    """
-
-    @staticmethod
-    def _convert_fragment(obj: AiotiebaType) -> Fragment:
-        """将单个爬取到的fragment对象转换为其对应的Pydantic模型实例。
-
-        此方法会自动处理_t, _p, _c等后缀，
-        通过反射动态构建目标模型名称并在当前模块的全局命名空间中选择相应的模型类。
-        如果遇到不支持的类型，会使用FragUnknownModel作为默认类型。
-
-        Args:
-            obj: aiotieba返回的对象。
-
-        Returns:
-            models.Fragment: 转换后的Pydantic模型实例。
-        """
-        source_type_name = type(obj).__name__
-        target_model_name = source_type_name.rsplit("_", 1)[0]
-
-        target_model = FRAG_MAP.get(target_model_name)
-
-        if target_model is None:
-            return FragUnknownModel(raw_data=repr(obj))
-
-        data_dict = dataclasses.asdict(obj)
-        return target_model(**data_dict)
-
-    @classmethod
-    def convert_content_list(cls, contents: list[Any]) -> list[Fragment]:
-        """将爬取到的fragment对象列表转换为Pydantic模型实例列表。
-
-        批量转换内容片段列表，每个片段都会调用convert_fragment函数进行转换。
-
-        Args:
-            contents: 从aiotieba库获取的内容片段对象列表。
-
-        Returns:
-            list[models.Fragment]: 转换后的Pydantic模型实例列表。
-        """
-        if not contents:
-            return []
-        return [cls._convert_fragment(frag) for frag in contents]
-
-
 class Forum(MixinBase):
     """贴吧信息数据模型。
 
@@ -211,24 +164,24 @@ class User(MixinBase):
     )
 
     @classmethod
-    def from_aiotieba(cls, user: aiotieba.UserInfo) -> User:
-        """从aiotieba.User对象创建User模型实例。
+    def from_dto(cls, dto: UserDTO) -> User:
+        """从UserDTO对象创建User模型实例。
 
         Args:
-            user: aiotieba返回的User对象。
+            dto: UserDTO对象。
 
         Returns:
             User: 转换后的User模型实例。
         """
         return cls(
-            user_id=user.user_id,
-            portrait=user.portrait,
-            user_name=user.user_name,
-            nick_name=user.nick_name,
+            user_id=dto.user_id,
+            portrait=dto.portrait,
+            user_name=dto.user_name,
+            nick_name=dto.nick_name,
         )
 
 
-class Thread(MixinBase, AiotiebaConvertible):
+class Thread(MixinBase):
     """主题贴数据模型。
 
     Attributes:
@@ -288,31 +241,31 @@ class Thread(MixinBase, AiotiebaConvertible):
     )
 
     @classmethod
-    def from_aiotieba(cls, thread: aiotieba.Thread) -> Thread:
-        """从aiotieba.Thread对象创建Thread模型实例。
+    def from_dto(cls, dto: ThreadDTO) -> Thread:
+        """从ThreadDTO对象创建Thread模型实例。
 
         Args:
-            thread: aiotieba返回的Thread对象。
+            dto: ThreadDTO对象。
 
         Returns:
             Thread: 转换后的Thread模型实例。
         """
         return cls(
-            tid=thread.tid,
-            create_time=datetime.fromtimestamp(thread.create_time, tz=SHANGHAI_TZ),
-            title=thread.title,
-            text=thread.contents.text,
-            contents=cls.convert_content_list(thread.contents.objs),
-            last_time=datetime.fromtimestamp(thread.last_time, tz=SHANGHAI_TZ),
-            reply_num=thread.reply_num,
-            author_level=thread.user.level,
+            tid=dto.tid,
+            create_time=dto.create_time,
+            title=dto.title,
+            text=dto.text,
+            contents=dto.contents,
+            last_time=dto.last_time,
+            reply_num=dto.reply_num,
+            author_level=dto.author.level,
             scrape_time=now_with_tz(),
-            fid=thread.fid,
-            author_id=thread.user.user_id,
+            fid=dto.fid,
+            author_id=dto.author_id,
         )
 
 
-class Post(MixinBase, AiotiebaConvertible):
+class Post(MixinBase):
     """回复数据模型。
 
     Attributes:
@@ -369,31 +322,31 @@ class Post(MixinBase, AiotiebaConvertible):
     )
 
     @classmethod
-    def from_aiotieba(cls, post: aiotieba.Post) -> Post:
-        """从aiotieba.Post对象创建Post模型实例。
+    def from_dto(cls, dto: PostDTO) -> Post:
+        """从PostDTO对象创建Post模型实例。
 
         Args:
-            post: aiotieba返回的Post对象。
+            dto: PostDTO对象。
 
         Returns:
             Post: 转换后的Post模型实例。
         """
         return cls(
-            pid=post.pid,
-            create_time=datetime.fromtimestamp(post.create_time, tz=SHANGHAI_TZ),
-            text=post.text,
-            contents=cls.convert_content_list(post.contents.objs),
-            floor=post.floor,
-            reply_num=post.reply_num,
-            author_level=post.user.level,
+            pid=dto.pid,
+            create_time=dto.create_time,
+            text=dto.text,
+            contents=dto.contents,
+            floor=dto.floor,
+            reply_num=dto.reply_num,
+            author_level=dto.author.level,
             scrape_time=now_with_tz(),
-            tid=post.tid,
-            fid=post.fid,
-            author_id=post.user.user_id,
+            tid=dto.tid,
+            fid=dto.fid,
+            author_id=dto.author_id,
         )
 
 
-class Comment(MixinBase, AiotiebaConvertible):
+class Comment(MixinBase):
     """楼中楼数据模型。
 
     Attributes:
@@ -443,25 +396,25 @@ class Comment(MixinBase, AiotiebaConvertible):
     )
 
     @classmethod
-    def from_aiotieba(cls, comment: aiotieba.Comment | aiotieba_posts.Comment_p) -> Comment:
-        """从aiotieba.Comment对象创建Comment模型实例。
+    def from_dto(cls, dto: CommentDTO) -> Comment:
+        """从CommentDTO对象创建Comment模型实例。
 
         Args:
-            comment: aiotieba返回的Comment对象。
+            dto: CommentDTO对象。
 
         Returns:
             Comment: 转换后的Comment模型实例。
         """
         return cls(
-            cid=comment.pid,
-            create_time=datetime.fromtimestamp(comment.create_time, tz=SHANGHAI_TZ),
-            text=comment.text,
-            contents=cls.convert_content_list(comment.contents.objs),
-            author_level=comment.user.level,
-            reply_to_id=comment.reply_to_id or None,
+            cid=dto.cid,
+            create_time=dto.create_time,
+            text=dto.text,
+            contents=dto.contents,
+            author_level=dto.author.level,
+            reply_to_id=dto.reply_to_id,
             scrape_time=now_with_tz(),
-            pid=comment.ppid,
-            tid=comment.tid,
-            fid=comment.fid,
-            author_id=comment.user.user_id,
+            pid=dto.pid,
+            tid=dto.tid,
+            fid=dto.fid,
+            author_id=dto.author_id,
         )
