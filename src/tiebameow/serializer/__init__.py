@@ -5,3 +5,11 @@ from .serializer import (
     deserialize_thread,
     serialize,
 )
+
+__all__ = [
+    "serialize",
+    "deserialize",
+    "deserialize_thread",
+    "deserialize_post",
+    "deserialize_comment",
+]

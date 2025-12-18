@@ -1,6 +1,8 @@
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+__all__ = ["SHANGHAI_TZ", "now_with_tz"]
+
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
 
 
