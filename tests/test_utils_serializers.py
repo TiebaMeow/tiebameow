@@ -1,7 +1,7 @@
 import pytest
 
 from tiebameow.models.dto import CommentDTO, PostDTO, ThreadDTO
-from tiebameow.serialization.serialization import (
+from tiebameow.serializer import (
     deserialize,
     deserialize_comment,
     deserialize_post,

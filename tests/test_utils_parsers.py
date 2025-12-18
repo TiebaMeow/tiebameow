@@ -2,7 +2,7 @@ import dataclasses
 from typing import Any
 
 from tiebameow.models.dto import CommentDTO, PostDTO, ThreadDTO, UserDTO
-from tiebameow.parser.parser import (
+from tiebameow.parsers import (
     convert_aiotieba_comment,
     convert_aiotieba_fragment,
     convert_aiotieba_post,
