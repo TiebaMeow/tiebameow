@@ -2,9 +2,17 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast, overload
 
-from ..models.dto import CommentDTO, PostDTO, ShareThreadDTO, ThreadDTO, UserDTO
+from ..models.dto import (
+    BaseUserDTO,
+    CommentDTO,
+    PostDTO,
+    ShareThreadDTO,
+    ThreadDTO,
+    ThreadUserDTO,
+    UserInfoDTO,
+)
 from ..schemas.fragments import FRAG_MAP, Fragment, FragUnknownModel
 from ..utils.time_utils import SHANGHAI_TZ
 
@@ -24,6 +32,7 @@ if TYPE_CHECKING:
     from aiotieba.api.get_comments import UserInfo_c
     from aiotieba.api.get_posts import UserInfo_p
     from aiotieba.api.get_threads import ShareThread, UserInfo_t
+    from aiotieba.api.tieba_uid2user_info import UserInfo_TUid
 
     type AiotiebaType = aiotieba.typing.Thread | aiotieba.typing.Post | aiotieba.typing.Comment
     type AiotiebaFragType = (
@@ -51,23 +60,83 @@ def convert_aiotieba_content_list(contents: list[AiotiebaFragType | Any]) -> lis
     return [convert_aiotieba_fragment(frag) for frag in contents]
 
 
-def convert_aiotieba_user(user: AiotiebaUserType) -> UserDTO:
-    return UserDTO(
+def convert_aiotieba_tiebauiduser(user: UserInfo_TUid) -> BaseUserDTO:
+    return BaseUserDTO(
         user_id=user.user_id,
         portrait=user.portrait,
         user_name=user.user_name,
-        nick_name=user.nick_name,
+        nick_name_new=user.nick_name,
+    )
+
+
+def convert_aiotieba_threaduser(user: AiotiebaUserType) -> ThreadUserDTO:
+    return ThreadUserDTO(
+        user_id=user.user_id,
+        portrait=user.portrait,
+        user_name=user.user_name,
+        nick_name_new=user.nick_name,
         level=user.level,
         glevel=getattr(user, "glevel", None),
+        gender=user.gender.name,
         ip=getattr(user, "ip", None),
-        gender=user.gender.name if hasattr(user, "gender") else None,
-        icons=user.icons if hasattr(user, "icons") else None,
-        is_bawu=getattr(user, "is_bawu", None),
-        is_vip=getattr(user, "is_vip", None),
+        icons=user.icons,
+        is_bawu=user.is_bawu,
+        is_vip=user.is_vip,
         is_god=user.is_god,
-        priv_like=user.priv_like.name if hasattr(user, "priv_like") else None,
-        priv_reply=user.priv_reply.name if hasattr(user, "priv_reply") else None,
+        priv_like=user.priv_like.name,
+        priv_reply=user.priv_reply.name,
     )
+
+
+def convert_aiotieba_userinfo(user: aiotieba.typing.UserInfo) -> UserInfoDTO:
+    return UserInfoDTO(
+        user_id=user.user_id,
+        portrait=user.portrait,
+        user_name=user.user_name,
+        nick_name_new=user.nick_name,
+        nick_name_old=user.nick_name_old,
+        tieba_uid=user.tieba_uid,
+        glevel=user.glevel,
+        gender=user.gender.name,
+        age=user.age,
+        post_num=user.post_num,
+        agree_num=user.agree_num,
+        fan_num=user.fan_num,
+        follow_num=user.follow_num,
+        forum_num=user.forum_num,
+        sign=user.sign,
+        ip=user.ip,
+        icons=user.icons,
+        is_vip=user.is_vip,
+        is_god=user.is_god,
+        is_blocked=user.is_blocked,
+        priv_like=user.priv_like.name,
+        priv_reply=user.priv_reply.name,
+    )
+
+
+@overload
+def convert_aiotieba_user(user: aiotieba.typing.UserInfo) -> UserInfoDTO: ...
+
+
+@overload
+def convert_aiotieba_user(user: AiotiebaUserType) -> ThreadUserDTO:  # type: ignore[overload-cannot-match]
+    ...
+
+
+@overload
+def convert_aiotieba_user(user: UserInfo_TUid) -> BaseUserDTO:  # type: ignore[overload-cannot-match]
+    ...
+
+
+def convert_aiotieba_user(
+    user: UserInfo_TUid | AiotiebaUserType | aiotieba.typing.UserInfo,
+) -> BaseUserDTO | ThreadUserDTO | UserInfoDTO:
+    if hasattr(user, "tieba_uid"):
+        return convert_aiotieba_userinfo(cast("aiotieba.typing.UserInfo", user))
+    if hasattr(user, "level"):
+        return convert_aiotieba_threaduser(cast("AiotiebaUserType", user))
+    return convert_aiotieba_tiebauiduser(cast("UserInfo_TUid", user))
 
 
 def convert_aiotieba_share_thread(share_thread: ShareThread) -> ShareThreadDTO:
@@ -92,7 +161,7 @@ def convert_aiotieba_thread(tb_thread: aiotieba.typing.Thread) -> ThreadDTO:
         fid=tb_thread.fid,
         fname=tb_thread.fname,
         author_id=tb_thread.author_id,
-        author=convert_aiotieba_user(tb_thread.user),
+        author=convert_aiotieba_threaduser(tb_thread.user),
         title=tb_thread.title,
         contents=convert_aiotieba_content_list(tb_thread.contents.objs),
         is_good=tb_thread.is_good,
@@ -121,7 +190,7 @@ def convert_aiotieba_post(tb_post: aiotieba.typing.Post) -> PostDTO:
         fid=tb_post.fid,
         fname=tb_post.fname,
         author_id=tb_post.author_id,
-        author=convert_aiotieba_user(tb_post.user),
+        author=convert_aiotieba_threaduser(tb_post.user),
         contents=convert_aiotieba_content_list(tb_post.contents.objs),
         sign=tb_post.sign,
         is_aimeme=tb_post.is_aimeme,
@@ -142,7 +211,7 @@ def convert_aiotieba_comment(tb_comment: aiotieba.typing.Comment) -> CommentDTO:
         fid=tb_comment.fid,
         fname=tb_comment.fname,
         author_id=tb_comment.author_id,
-        author=convert_aiotieba_user(tb_comment.user),
+        author=convert_aiotieba_threaduser(tb_comment.user),
         contents=convert_aiotieba_content_list(tb_comment.contents.objs),
         reply_to_id=tb_comment.reply_to_id,
         is_thread_author=tb_comment.is_thread_author,

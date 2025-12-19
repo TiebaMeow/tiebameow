@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 
 from pydantic import TypeAdapter, ValidationError
@@ -20,12 +21,11 @@ from ..utils.time_utils import now_with_tz
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from datetime import datetime
 
     import aiotieba.typing as aiotieba
     from sqlalchemy.engine.interfaces import Dialect
 
-    from .dto import CommentDTO, PostDTO, ThreadDTO, UserDTO
+    from .dto import BaseUserDTO, CommentDTO, PostDTO, ThreadDTO
 
     type AiotiebaType = aiotieba.Thread | aiotieba.Post | aiotieba.Comment
 
@@ -164,7 +164,7 @@ class User(MixinBase):
     )
 
     @classmethod
-    def from_dto(cls, dto: UserDTO) -> User:
+    def from_dto(cls, dto: BaseUserDTO) -> User:
         """从UserDTO对象创建User模型实例。
 
         Args:

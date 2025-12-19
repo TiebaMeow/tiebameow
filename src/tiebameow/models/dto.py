@@ -7,26 +7,65 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..schemas.fragments import Fragment, TypeFragText
 
 
-class UserDTO(BaseModel):
+class BaseUserDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     user_id: int
     portrait: str
     user_name: str
-    nick_name: str
+    nick_name_new: str
+
+    @property
+    def nick_name(self) -> str:
+        return self.nick_name_new
+
+    @property
+    def show_name(self) -> str:
+        return self.nick_name_new or self.user_name
+
+
+class ThreadUserDTO(BaseUserDTO):
+    model_config = ConfigDict(from_attributes=True)
 
     level: int
     glevel: int | None = None
-    ip: str | None = None
-    gender: Literal["UNKNOWN", "MALE", "FEMALE"] | None = None
-    icons: list[str] | None = None
 
-    is_bawu: bool | None = None
-    is_vip: bool | None = None
+    gender: Literal["UNKNOWN", "MALE", "FEMALE"]
+    ip: str | None = None
+    icons: list[str]
+
+    is_bawu: bool
+    is_vip: bool
     is_god: bool
 
-    priv_like: Literal["PUBLIC", "FRIEND", "HIDE"] | None = None
-    priv_reply: Literal["ALL", "FANS", "FOLLOW"] | None = None
+    priv_like: Literal["PUBLIC", "FRIEND", "HIDE"]
+    priv_reply: Literal["ALL", "FANS", "FOLLOW"]
+
+
+class UserInfoDTO(BaseUserDTO):
+    model_config = ConfigDict(from_attributes=True)
+
+    nick_name_old: str
+    tieba_uid: int
+
+    glevel: int
+    gender: Literal["UNKNOWN", "MALE", "FEMALE"]
+    age: float
+    post_num: int
+    agree_num: int
+    fan_num: int
+    follow_num: int
+    forum_num: int
+    sign: str
+    ip: str
+    icons: list[str]
+
+    is_vip: bool
+    is_god: bool
+    is_blocked: bool
+
+    priv_like: Literal["PUBLIC", "FRIEND", "HIDE"]
+    priv_reply: Literal["ALL", "FANS", "FOLLOW"]
 
 
 class ShareThreadDTO(BaseModel):
@@ -52,7 +91,7 @@ class ThreadDTO(BaseModel):
     fname: str
 
     author_id: int
-    author: UserDTO
+    author: ThreadUserDTO
 
     title: str
     contents: list[Fragment] = Field(default_factory=list)
@@ -91,7 +130,7 @@ class PostDTO(BaseModel):
     fname: str
 
     author_id: int
-    author: UserDTO
+    author: ThreadUserDTO
 
     contents: list[Fragment] = Field(default_factory=list)
     sign: str
@@ -122,7 +161,7 @@ class CommentDTO(BaseModel):
     fname: str
 
     author_id: int
-    author: UserDTO
+    author: ThreadUserDTO
 
     contents: list[Fragment] = Field(default_factory=list)
     reply_to_id: int

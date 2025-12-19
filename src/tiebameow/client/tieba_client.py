@@ -22,7 +22,12 @@ from tenacity import (
     wait_fixed,
 )
 
-from ..parsers import convert_aiotieba_comment, convert_aiotieba_post, convert_aiotieba_thread
+from ..parser import (
+    convert_aiotieba_comment,
+    convert_aiotieba_post,
+    convert_aiotieba_thread,
+    convert_aiotieba_userinfo,
+)
 from ..utils.logger import logger
 
 if TYPE_CHECKING:
@@ -33,7 +38,7 @@ if TYPE_CHECKING:
     from aiotieba.api.tieba_uid2user_info._classdef import UserInfo_TUid
     from aiotieba.typing import Comments, Posts, Threads, UserInfo
 
-    from ..models.dto import CommentDTO, PostDTO, ThreadDTO
+    from ..models.dto import CommentDTO, PostDTO, ThreadDTO, UserInfoDTO
 
 
 class NeedRetryError(Exception):
@@ -264,14 +269,20 @@ class Client(tb.Client):  # type: ignore[misc]
         comments = await self.get_comments(tid, pid, pn, is_comment=is_comment)
         return [convert_aiotieba_comment(c) for c in comments]
 
-    async def anyid_to_user_info(self, tieba_uid: int | str) -> UserInfo_TUid | UserInfo:
-        if isinstance(tieba_uid, str):
-            if tieba_uid.isdigit():
-                tieba_uid = int(tieba_uid)
-            ret = await self.get_user_info(tieba_uid)
+    async def anyid_to_user_info(self, uid: int | str, is_tieba_uid: bool = True) -> UserInfoDTO:
+        """
+        根据任意用户ID获取完整的用户信息，并转换为通用DTO模型。
+
+        Args:
+            uid: 用户ID，可以是贴吧UID或用户ID。
+            is_tieba_uid: 指示uid是否为贴吧UID，默认为True。
+        """
+        if is_tieba_uid and isinstance(uid, int):
+            user_tuid = await self.tieba_uid2user_info(uid)
+            user = await self.get_user_info(user_tuid.user_id)
         else:
-            ret = await self.tieba_uid2user_info(tieba_uid)
-        return ret
+            user = await self.get_user_info(uid)
+        return convert_aiotieba_userinfo(user)
 
     async def get_nickname_old(self, user_id: int) -> str:
         user_info = await self.get_user_info(user_id, require=ReqUInfo.BASIC)
