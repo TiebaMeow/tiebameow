@@ -8,11 +8,7 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 import aiotieba as tb
-from aiotieba import ReqUInfo
-from aiotieba.api._classdef import UserInfo
-from aiotieba.api.tieba_uid2user_info._classdef import UserInfo_TUid
-from aiotieba.enums import PostSortType, ThreadSortType
-from aiotieba.exception import BoolResponse, HTTPStatusError, IntResponse, TiebaServerError
+from aiotieba.exception import BoolResponse, HTTPStatusError, IntResponse, StrResponse, TiebaServerError
 from tenacity import (
     AsyncRetrying,
     RetryCallState,
@@ -23,22 +19,28 @@ from tenacity import (
 )
 
 from ..parser import (
-    convert_aiotieba_comment,
-    convert_aiotieba_post,
-    convert_aiotieba_thread,
+    convert_aiotieba_comments,
+    convert_aiotieba_posts,
+    convert_aiotieba_threads,
     convert_aiotieba_userinfo,
 )
 from ..utils.logger import logger
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
+    from datetime import datetime
 
     from aiolimiter import AsyncLimiter
+    from aiotieba.api.get_bawu_blacklist._classdef import BawuBlacklistUsers
+    from aiotieba.api.get_bawu_postlogs._classdef import Postlogs
+    from aiotieba.api.get_bawu_userlogs._classdef import Userlogs
+    from aiotieba.api.get_follow_forums._classdef import FollowForums
+    from aiotieba.api.get_tab_map._classdef import TabMap
     from aiotieba.api.get_user_contents._classdef import UserPostss, UserThreads
     from aiotieba.api.tieba_uid2user_info._classdef import UserInfo_TUid
     from aiotieba.typing import Comments, Posts, Threads, UserInfo
 
-    from ..models.dto import CommentDTO, PostDTO, ThreadDTO, UserInfoDTO
+    from ..models.dto import CommentsDTO, PostsDTO, ThreadsDTO, UserInfoDTO
 
 
 class NeedRetryError(Exception):
@@ -216,6 +218,10 @@ class Client(tb.Client):  # type: ignore[misc]
                 await stack.enter_async_context(self.semaphore)
             yield
 
+    # 以下为直接返回DTO模型的封装方法
+
+    # 获取贴子内容 #
+
     async def get_threads_dto(
         self,
         fname_or_fid: str | int,
@@ -223,12 +229,12 @@ class Client(tb.Client):  # type: ignore[misc]
         pn: int = 1,
         *,
         rn: int = 30,
-        sort: ThreadSortType = ThreadSortType.REPLY,
+        sort: tb.ThreadSortType = tb.ThreadSortType.REPLY,
         is_good: bool = False,
-    ) -> list[ThreadDTO]:
+    ) -> ThreadsDTO:
         """获取指定贴吧的主题列表，并转换为通用DTO模型。"""
         threads = await self.get_threads(fname_or_fid, pn, rn=rn, sort=sort, is_good=is_good)
-        return [convert_aiotieba_thread(t) for t in threads]
+        return convert_aiotieba_threads(threads)
 
     async def get_posts_dto(
         self,
@@ -237,12 +243,12 @@ class Client(tb.Client):  # type: ignore[misc]
         pn: int = 1,
         *,
         rn: int = 30,
-        sort: tb.PostSortType = PostSortType.ASC,
+        sort: tb.PostSortType = tb.PostSortType.ASC,
         only_thread_author: bool = False,
         with_comments: bool = False,
         comment_sort_by_agree: bool = True,
         comment_rn: int = 4,
-    ) -> list[PostDTO]:
+    ) -> PostsDTO:
         """获取指定主题贴的回复列表，并转换为通用DTO模型。"""
         posts = await self.get_posts(
             tid,
@@ -254,7 +260,7 @@ class Client(tb.Client):  # type: ignore[misc]
             comment_sort_by_agree=comment_sort_by_agree,
             comment_rn=comment_rn,
         )
-        return [convert_aiotieba_post(p) for p in posts]
+        return convert_aiotieba_posts(posts)
 
     async def get_comments_dto(
         self,
@@ -264,17 +270,19 @@ class Client(tb.Client):  # type: ignore[misc]
         pn: int = 1,
         *,
         is_comment: bool = False,
-    ) -> list[CommentDTO]:
+    ) -> CommentsDTO:
         """获取指定回复的楼中楼列表，并转换为通用DTO模型。"""
         comments = await self.get_comments(tid, pid, pn, is_comment=is_comment)
-        return [convert_aiotieba_comment(c) for c in comments]
+        return convert_aiotieba_comments(comments)
 
-    async def anyid_to_user_info(self, uid: int | str, is_tieba_uid: bool = True) -> UserInfoDTO:
+    # 获取用户信息 #
+
+    async def anyid2user_info_dto(self, uid: int | str, is_tieba_uid: bool = True) -> UserInfoDTO:
         """
         根据任意用户ID获取完整的用户信息，并转换为通用DTO模型。
 
         Args:
-            uid: 用户ID，可以是贴吧UID或用户ID。
+            uid: 用户ID，可以是贴吧ID、user_id、portrait或用户名。
             is_tieba_uid: 指示uid是否为贴吧UID，默认为True。
         """
         if is_tieba_uid and isinstance(uid, int):
@@ -285,10 +293,12 @@ class Client(tb.Client):  # type: ignore[misc]
         return convert_aiotieba_userinfo(user)
 
     async def get_nickname_old(self, user_id: int) -> str:
-        user_info = await self.get_user_info(user_id, require=ReqUInfo.BASIC)
+        user_info = await self.get_user_info(user_id, require=tb.ReqUInfo.BASIC)
         return str(user_info.nick_name_old)
 
-    # 以下为重写的 aiotieba.Client API，添加了 @with_ensure 装饰器
+    # 以下为重写的部分 aiotieba.Client API
+    # 添加了 @with_ensure 装饰器以启用重试机制
+    # 完全拦截过于魔法，这里仅重写部分常用API
 
     # 获取贴子内容 #
 
@@ -300,7 +310,7 @@ class Client(tb.Client):  # type: ignore[misc]
         pn: int = 1,
         *,
         rn: int = 30,
-        sort: tb.ThreadSortType = ThreadSortType.REPLY,
+        sort: tb.ThreadSortType = tb.ThreadSortType.REPLY,
         is_good: bool = False,
     ) -> Threads:
         return await super().get_threads(fname_or_fid, pn, rn=rn, sort=sort, is_good=is_good)
@@ -313,7 +323,7 @@ class Client(tb.Client):  # type: ignore[misc]
         pn: int = 1,
         *,
         rn: int = 30,
-        sort: tb.PostSortType = PostSortType.ASC,
+        sort: tb.PostSortType = tb.PostSortType.ASC,
         only_thread_author: bool = False,
         with_comments: bool = False,
         comment_sort_by_agree: bool = True,
@@ -362,23 +372,89 @@ class Client(tb.Client):  # type: ignore[misc]
     ) -> UserPostss:
         return await super().get_user_posts(id_, pn, rn=rn)
 
-    # 获取用户或贴吧信息 #
+    # 获取用户信息 #
 
     @with_ensure
     async def tieba_uid2user_info(self, tieba_uid: int) -> UserInfo_TUid:
         return await super().tieba_uid2user_info(tieba_uid)
 
     @with_ensure
-    async def get_user_info(self, id_: str | int, /, require: ReqUInfo = ReqUInfo.ALL) -> UserInfo:
+    async def get_user_info(self, id_: str | int, /, require: tb.ReqUInfo = tb.ReqUInfo.ALL) -> UserInfo:
         return await super().get_user_info(id_, require)
 
     @with_ensure
-    async def get_self_info(self, require: ReqUInfo = ReqUInfo.ALL) -> UserInfo:
+    async def get_self_info(self, require: tb.ReqUInfo = tb.ReqUInfo.ALL) -> UserInfo:
         return await super().get_self_info(require)
+
+    @with_ensure
+    async def get_follow_forums(self, id_: str | int, /, pn: int = 1, *, rn: int = 50) -> FollowForums:
+        return await super().get_follow_forums(id_, pn, rn=rn)
+
+    # 获取贴吧信息 #
 
     @with_ensure
     async def get_fid(self, fname: str) -> IntResponse:
         return await super().get_fid(fname)
+
+    @with_ensure
+    async def get_fname(self, fid: int) -> StrResponse:
+        return await super().get_fname(fid)
+
+    @with_ensure
+    async def get_tab_map(self, fname_or_fid: str | int) -> TabMap:
+        return await super().get_tab_map(fname_or_fid)
+
+    # 吧务查询 #
+
+    @with_ensure
+    async def get_bawu_blacklist(self, fname_or_fid: str | int, /, pn: int = 1) -> BawuBlacklistUsers:
+        return await super().get_bawu_blacklist(fname_or_fid, pn)
+
+    @with_ensure
+    async def get_bawu_postlogs(
+        self,
+        fname_or_fid: str | int,
+        /,
+        pn: int = 1,
+        *,
+        search_value: str = "",
+        search_type: tb.BawuSearchType = tb.BawuSearchType.USER,
+        start_dt: datetime | None = None,
+        end_dt: datetime | None = None,
+        op_type: int = 0,
+    ) -> Postlogs:
+        return await super().get_bawu_postlogs(
+            fname_or_fid,
+            pn,
+            search_value=search_value,
+            search_type=search_type,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            op_type=op_type,
+        )
+
+    @with_ensure
+    async def get_bawu_userlogs(
+        self,
+        fname_or_fid: str | int,
+        /,
+        pn: int = 1,
+        *,
+        search_value: str = "",
+        search_type: tb.BawuSearchType = tb.BawuSearchType.USER,
+        start_dt: datetime | None = None,
+        end_dt: datetime | None = None,
+        op_type: int = 0,
+    ) -> Userlogs:
+        return await super().get_bawu_userlogs(
+            fname_or_fid,
+            pn,
+            search_value=search_value,
+            search_type=search_type,
+            start_dt=start_dt,
+            end_dt=end_dt,
+            op_type=op_type,
+        )
 
     # 吧务操作 #
 

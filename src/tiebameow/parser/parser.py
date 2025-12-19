@@ -5,11 +5,16 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any, cast, overload
 
 from ..models.dto import (
+    BaseForumDTO,
     BaseUserDTO,
     CommentDTO,
+    CommentsDTO,
+    PageInfoDTO,
     PostDTO,
+    PostsDTO,
     ShareThreadDTO,
     ThreadDTO,
+    ThreadsDTO,
     ThreadUserDTO,
     UserInfoDTO,
 )
@@ -29,9 +34,9 @@ if TYPE_CHECKING:
         FragUnknown,
         FragVideo,
     )
-    from aiotieba.api.get_comments import UserInfo_c
-    from aiotieba.api.get_posts import UserInfo_p
-    from aiotieba.api.get_threads import ShareThread, UserInfo_t
+    from aiotieba.api.get_comments._classdef import Forum_c, Page_c, UserInfo_c
+    from aiotieba.api.get_posts._classdef import Forum_p, Page_p, UserInfo_p
+    from aiotieba.api.get_threads._classdef import Forum_t, Page_t, ShareThread, UserInfo_t
     from aiotieba.api.tieba_uid2user_info import UserInfo_TUid
 
     type AiotiebaType = aiotieba.typing.Thread | aiotieba.typing.Post | aiotieba.typing.Comment
@@ -39,6 +44,8 @@ if TYPE_CHECKING:
         FragAt | FragEmoji | FragImage | FragItem | FragLink | FragText | FragTiebaPlus | FragUnknown | FragVideo
     )
     type AiotiebaUserType = UserInfo_t | UserInfo_p | UserInfo_c
+    type AiotiebaPageType = Page_t | Page_p | Page_c
+    type AiotiebaForumType = Forum_t | Forum_p | Forum_c
 
 
 def convert_aiotieba_fragment(obj: AiotiebaFragType | Any) -> Fragment:
@@ -219,4 +226,46 @@ def convert_aiotieba_comment(tb_comment: aiotieba.typing.Comment) -> CommentDTO:
         disagree_num=tb_comment.disagree,
         create_time=datetime.fromtimestamp(tb_comment.create_time, SHANGHAI_TZ),
         floor=tb_comment.floor,
+    )
+
+
+def convert_aiotieba_pageinfo(page: AiotiebaPageType) -> PageInfoDTO:
+    return PageInfoDTO(
+        page_size=page.page_size,
+        current_page=page.current_page,
+        total_page=page.total_page,
+        total_count=page.total_count,
+        has_more=page.has_more,
+        has_prev=page.has_prev,
+    )
+
+
+def convert_aiotieba_forum(forum: AiotiebaForumType) -> BaseForumDTO:
+    return BaseForumDTO(
+        fid=forum.fid,
+        fname=forum.fname,
+    )
+
+
+def convert_aiotieba_threads(tb_threads: aiotieba.typing.Threads) -> ThreadsDTO:
+    return ThreadsDTO(
+        objs=[convert_aiotieba_thread(tb_thread) for tb_thread in tb_threads.objs],
+        page=convert_aiotieba_pageinfo(tb_threads.page),
+        forum=convert_aiotieba_forum(tb_threads.forum),
+    )
+
+
+def convert_aiotieba_posts(tb_posts: aiotieba.typing.Posts) -> PostsDTO:
+    return PostsDTO(
+        objs=[convert_aiotieba_post(tb_post) for tb_post in tb_posts.objs],
+        page=convert_aiotieba_pageinfo(tb_posts.page),
+        forum=convert_aiotieba_forum(tb_posts.forum),
+    )
+
+
+def convert_aiotieba_comments(tb_comments: aiotieba.typing.Comments) -> CommentsDTO:
+    return CommentsDTO(
+        objs=[convert_aiotieba_comment(tb_comment) for tb_comment in tb_comments.objs],
+        page=convert_aiotieba_pageinfo(tb_comments.page),
+        forum=convert_aiotieba_forum(tb_comments.forum),
     )

@@ -7,6 +7,13 @@ from pydantic import BaseModel, ConfigDict, Field
 from ..schemas.fragments import Fragment, TypeFragText
 
 
+class BaseForumDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    fid: int
+    fname: str
+
+
 class BaseUserDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -178,3 +185,39 @@ class CommentDTO(BaseModel):
     def text(self) -> str:
         text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
         return text
+
+
+class PageInfoDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    page_size: int = 0
+    current_page: int = 0
+    total_page: int = 0
+    total_count: int = 0
+
+    has_more: bool = False
+    has_prev: bool = False
+
+
+class ThreadsDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    objs: list[ThreadDTO] = Field(default_factory=list)
+    page: PageInfoDTO
+    forum: BaseForumDTO
+
+
+class PostsDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    objs: list[PostDTO] = Field(default_factory=list)
+    page: PageInfoDTO
+    forum: BaseForumDTO
+
+
+class CommentsDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    objs: list[CommentDTO] = Field(default_factory=list)
+    page: PageInfoDTO
+    forum: BaseForumDTO
