@@ -59,6 +59,9 @@ def _preprocess_post(data: Mapping[str, Any]) -> dict[str, Any]:
 
     _normalize_user(d)
 
+    if "comments" in d and isinstance(d["comments"], list):
+        d["comments"] = [_preprocess_comment(c) if isinstance(c, dict) else c for c in d["comments"]]
+
     return d
 
 

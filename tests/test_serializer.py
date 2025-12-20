@@ -30,6 +30,7 @@ def test_deserialize_thread() -> None:
             "user_name": "u",
             "nick_name_new": "n",
             "level": 1,
+            "glevel": 1,
             "gender": "MALE",
             "icons": [],
             "is_bawu": False,
@@ -77,6 +78,7 @@ def test_deserialize_thread_normalization() -> None:
             "user_name": "u",
             "nick_name_new": "n",
             "level": 1,
+            "glevel": 1,
             "gender": "MALE",
             "icons": [],
             "is_bawu": False,
@@ -122,7 +124,9 @@ def test_deserialize_post() -> None:
             "user_name": "u",
             "nick_name_new": "n",
             "level": 1,
+            "glevel": 1,
             "gender": "MALE",
+            "ip": "127.0.0.1",
             "icons": [],
             "is_bawu": False,
             "is_vip": False,
@@ -132,6 +136,23 @@ def test_deserialize_post() -> None:
         },
         "contents": [{"type": "text", "text": "content"}],
         "sign": "",
+        "comments": [
+            {
+                "cid": 1,
+                "pid": 1,
+                "tid": 1,
+                "fid": 1,
+                "fname": "fname",
+                "author_id": 1,
+                "contents": [{"type": "text", "text": "content"}],
+                "reply_to_id": 0,
+                "is_thread_author": False,
+                "agree_num": 0,
+                "disagree_num": 0,
+                "create_time": "2023-01-01T00:00:00",
+                "floor": 1,
+            }
+        ],
         "is_aimeme": False,
         "is_thread_author": False,
         "agree_num": 0,
@@ -143,6 +164,8 @@ def test_deserialize_post() -> None:
     post = deserialize_post(data)
     assert isinstance(post, PostDTO)
     assert post.pid == 1
+    assert len(post.contents) == 1
+    assert isinstance(post.contents[0], FragTextModel)
 
 
 def test_deserialize_comment() -> None:

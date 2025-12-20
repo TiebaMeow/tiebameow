@@ -1,4 +1,6 @@
-from datetime import datetime
+from __future__ import annotations
+
+from datetime import datetime  # noqa: TC003
 from functools import cached_property
 from typing import Literal
 
@@ -35,10 +37,43 @@ class ThreadUserDTO(BaseUserDTO):
     model_config = ConfigDict(from_attributes=True)
 
     level: int
-    glevel: int | None = None
+    glevel: int
 
     gender: Literal["UNKNOWN", "MALE", "FEMALE"]
-    ip: str | None = None
+    icons: list[str]
+
+    is_bawu: bool
+    is_vip: bool
+    is_god: bool
+
+    priv_like: Literal["PUBLIC", "FRIEND", "HIDE"]
+    priv_reply: Literal["ALL", "FANS", "FOLLOW"]
+
+
+class PostUserDTO(BaseUserDTO):
+    model_config = ConfigDict(from_attributes=True)
+
+    level: int
+    glevel: int
+
+    gender: Literal["UNKNOWN", "MALE", "FEMALE"]
+    ip: str
+    icons: list[str]
+
+    is_bawu: bool
+    is_vip: bool
+    is_god: bool
+
+    priv_like: Literal["PUBLIC", "FRIEND", "HIDE"]
+    priv_reply: Literal["ALL", "FANS", "FOLLOW"]
+
+
+class CommentUserDTO(BaseUserDTO):
+    model_config = ConfigDict(from_attributes=True)
+
+    level: int
+
+    gender: Literal["UNKNOWN", "MALE", "FEMALE"]
     icons: list[str]
 
     is_bawu: bool
@@ -137,10 +172,11 @@ class PostDTO(BaseModel):
     fname: str
 
     author_id: int
-    author: ThreadUserDTO
+    author: PostUserDTO
 
     contents: list[Fragment] = Field(default_factory=list)
     sign: str
+    comments: list[CommentpDTO] = Field(default_factory=list)
 
     is_aimeme: bool
     is_thread_author: bool
@@ -168,7 +204,35 @@ class CommentDTO(BaseModel):
     fname: str
 
     author_id: int
-    author: ThreadUserDTO
+    author: CommentUserDTO
+
+    contents: list[Fragment] = Field(default_factory=list)
+    reply_to_id: int
+
+    is_thread_author: bool
+
+    agree_num: int
+    disagree_num: int
+    create_time: datetime
+
+    floor: int
+
+    @cached_property
+    def text(self) -> str:
+        text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
+        return text
+
+
+class CommentpDTO(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    cid: int
+    pid: int
+    tid: int
+    fid: int
+    fname: str
+
+    author_id: int
 
     contents: list[Fragment] = Field(default_factory=list)
     reply_to_id: int
