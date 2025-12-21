@@ -176,7 +176,7 @@ class PostDTO(BaseModel):
 
     contents: list[Fragment] = Field(default_factory=list)
     sign: str
-    comments: list[CommentpDTO] = Field(default_factory=list)
+    comments: list[CommentDTO] = Field(default_factory=list)
 
     is_aimeme: bool
     is_thread_author: bool
@@ -205,34 +205,6 @@ class CommentDTO(BaseModel):
 
     author_id: int
     author: CommentUserDTO
-
-    contents: list[Fragment] = Field(default_factory=list)
-    reply_to_id: int
-
-    is_thread_author: bool
-
-    agree_num: int
-    disagree_num: int
-    create_time: datetime
-
-    floor: int
-
-    @cached_property
-    def text(self) -> str:
-        text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
-        return text
-
-
-class CommentpDTO(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    cid: int
-    pid: int
-    tid: int
-    fid: int
-    fname: str
-
-    author_id: int
 
     contents: list[Fragment] = Field(default_factory=list)
     reply_to_id: int

@@ -144,6 +144,20 @@ def test_deserialize_post() -> None:
                 "fid": 1,
                 "fname": "fname",
                 "author_id": 1,
+                "user": {
+                    "user_id": 1,
+                    "portrait": "p",
+                    "user_name": "u",
+                    "nick_name_new": "n",
+                    "level": 1,
+                    "gender": "MALE",
+                    "icons": [],
+                    "is_bawu": False,
+                    "is_vip": False,
+                    "is_god": False,
+                    "priv_like": "PUBLIC",
+                    "priv_reply": "ALL",
+                },
                 "contents": [{"type": "text", "text": "content"}],
                 "reply_to_id": 0,
                 "is_thread_author": False,
@@ -164,6 +178,7 @@ def test_deserialize_post() -> None:
     post = deserialize_post(data)
     assert isinstance(post, PostDTO)
     assert post.pid == 1
+    assert post.author.user_id == 1
     assert len(post.contents) == 1
     assert isinstance(post.contents[0], FragTextModel)
 

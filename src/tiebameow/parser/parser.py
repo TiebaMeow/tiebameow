@@ -8,7 +8,6 @@ from ..models.dto import (
     BaseForumDTO,
     BaseUserDTO,
     CommentDTO,
-    CommentpDTO,
     CommentsDTO,
     CommentUserDTO,
     PageInfoDTO,
@@ -116,7 +115,7 @@ def convert_aiotieba_postuser(user: UserInfo_p) -> PostUserDTO:
     )
 
 
-def convert_aiotieba_commentuser(user: UserInfo_c) -> CommentUserDTO:
+def convert_aiotieba_commentuser(user: UserInfo_c | UserInfo_p) -> CommentUserDTO:
     return CommentUserDTO(
         user_id=user.user_id,
         portrait=user.portrait,
@@ -263,7 +262,7 @@ def convert_aiotieba_post(tb_post: Post) -> PostDTO:
     )
 
 
-def convert_aiotieba_comment(tb_comment: Comment) -> CommentDTO:
+def convert_aiotieba_comment(tb_comment: Comment | Comment_p) -> CommentDTO:
     return CommentDTO(
         cid=tb_comment.pid,
         pid=tb_comment.ppid,
@@ -282,25 +281,8 @@ def convert_aiotieba_comment(tb_comment: Comment) -> CommentDTO:
     )
 
 
-def convert_aiotieba_commentsp(tb_post_comments: list[Comment_p]) -> list[CommentpDTO]:
-    return [
-        CommentpDTO(
-            cid=comment.pid,
-            pid=comment.ppid,
-            tid=comment.tid,
-            fid=comment.fid,
-            fname=comment.fname,
-            author_id=comment.author_id,
-            contents=convert_aiotieba_content_list(comment.contents.objs),
-            reply_to_id=comment.reply_to_id,
-            is_thread_author=comment.is_thread_author,
-            agree_num=comment.agree,
-            disagree_num=comment.disagree,
-            create_time=datetime.fromtimestamp(comment.create_time, SHANGHAI_TZ),
-            floor=comment.floor,
-        )
-        for comment in tb_post_comments
-    ]
+def convert_aiotieba_commentsp(tb_post_comments: list[Comment_p]) -> list[CommentDTO]:
+    return [convert_aiotieba_comment(tb_comment) for tb_comment in tb_post_comments]
 
 
 def convert_aiotieba_pageinfo(page: AiotiebaPageType) -> PageInfoDTO:
