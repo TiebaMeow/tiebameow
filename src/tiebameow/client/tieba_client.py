@@ -119,6 +119,9 @@ class Client(tb.Client):  # type: ignore[misc]
         limiter: AsyncLimiter | None = None,
         semaphore: asyncio.Semaphore | None = None,
         cooldown_429: float = 0.0,
+        retry_attempts: int = 3,
+        wait_initial: float = 0.5,
+        wait_max: float = 5.0,
         **kwargs: Any,
     ):
         """初始化扩展的aiotieba客户端。
@@ -137,8 +140,8 @@ class Client(tb.Client):  # type: ignore[misc]
         self._cooldown_until: float = 0.0
 
         self._retry_strategy = AsyncRetrying(
-            stop=stop_after_attempt(3),
-            wait=wait_exponential_jitter(initial=0.5, max=5.0),
+            stop=stop_after_attempt(retry_attempts),
+            wait=wait_exponential_jitter(initial=wait_initial, max=wait_max),
             retry=retry_if_exception_type((
                 OSError,
                 asyncio.TimeoutError,
