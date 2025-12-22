@@ -11,11 +11,9 @@ import aiotieba as tb
 from aiotieba.exception import BoolResponse, HTTPStatusError, IntResponse, StrResponse, TiebaServerError
 from tenacity import (
     AsyncRetrying,
-    RetryCallState,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential_jitter,
-    wait_fixed,
 )
 
 from ..parser import (
@@ -43,101 +41,66 @@ if TYPE_CHECKING:
     from ..models.dto import CommentsDTO, PostsDTO, ThreadsDTO, UserInfoDTO
 
 
-class NeedRetryError(Exception):
-    pass
+class AiotiebaError(Exception):
+    """基础 aiotieba API 异常"""
+
+    def __init__(self, code: int, msg: str):
+        self.code = code
+        self.msg = msg
+        super().__init__(f"[{code}] {msg}")
 
 
-class UnretriableError(Exception):
-    pass
+class RetriableApiError(AiotiebaError):
+    """aiotieba 返回的可重试的异常"""
 
 
-def _wait_after_error(retry_state: RetryCallState) -> float:
-    """
-    tenacity的等待回调函数。
+class UnretriableApiError(AiotiebaError):
+    """aiotieba 返回的无法重试的异常"""
 
-    将429错误交由全局冷却逻辑处理，其他错误使用指数退避等待策略。
-    """
-    outcome = retry_state.outcome
-    if outcome is None:
-        return wait_exponential_jitter(initial=0.5, max=5.0)(retry_state)
 
-    exc = outcome.exception()
-    if isinstance(exc, HTTPStatusError) and exc.code == 429:
-        # 如果设置了全局冷却时间，则由with_ensure内部处理等待，这里返回0
-        # 否则，将429视为普通错误，使用指数退避
-        client = retry_state.args[0]
-        if getattr(client, "_cooldown_seconds_429", 0) > 0:
-            return wait_fixed(0)(retry_state)
+class ErrorHandler:
+    RETRIABLE_CODES: set[int] = {
+        -65536,
+        11,
+        77,
+        408,
+        429,
+        4011,
+        110001,
+        220034,
+        230871,
+        300000,
+        1989005,
+        2210002,
+        28113295,
+    }
 
-    return wait_exponential_jitter(initial=0.5, max=5.0)(retry_state)
+    @classmethod
+    def check(cls, result: Any) -> None:
+        """解析 aiotieba 返回对象中的 err 字段"""
+        err = getattr(result, "err", None)
+        if err is None:
+            return
+
+        if isinstance(err, (HTTPStatusError, TiebaServerError)):
+            code = err.code
+            msg = err.msg
+
+            if code in cls.RETRIABLE_CODES:
+                raise RetriableApiError(code, msg)
+
+            raise UnretriableApiError(code, msg)
+
+        elif isinstance(err, Exception):
+            raise err
 
 
 def with_ensure[F: Callable[..., Awaitable[Any]]](func: F) -> F:
-    """为Client方法添加重试机制的装饰器。"""
+    """装饰器：为 aiotieba.Client 的方法添加重试和限流支持。"""
 
     @wraps(func)
     async def wrapper(self: Client, *args: Any, **kwargs: Any) -> Any:
-        try:
-            async for attempt in AsyncRetrying(
-                stop=stop_after_attempt(3),
-                wait=_wait_after_error,
-                retry=retry_if_exception_type((
-                    OSError,
-                    asyncio.TimeoutError,
-                    TimeoutError,
-                    ConnectionError,
-                    HTTPStatusError,
-                    TiebaServerError,
-                    NeedRetryError,
-                )),
-                reraise=True,
-            ):
-                with attempt:
-                    try:
-                        async with self.rate_limiter():
-                            result = await func(self, *args, **kwargs)
-                        err = getattr(result, "err", None)
-                        if err is not None:
-                            raise err
-                        return result
-                    except (HTTPStatusError, TiebaServerError) as err:
-                        if err.code == 429:
-                            if self._cooldown_seconds_429 > 0:
-                                wait_seconds = self._cooldown_seconds_429
-                                await self.set_cooldown(wait_seconds)
-                                await asyncio.sleep(wait_seconds)
-                            logger.debug(f"{func.__name__} received 429 Too Many Requests, retrying...")
-                            raise
-                        elif err.code in {
-                            -65536,
-                            11,
-                            77,
-                            408,
-                            4011,
-                            110001,
-                            220034,
-                            230871,
-                            300000,
-                            1989005,
-                            2210002,
-                            28113295,
-                        }:
-                            logger.debug(f"{func.__name__} returned retriable error: {err}, retrying...")
-                            raise
-                        else:
-                            logger.exception(f"{func.__name__} returned unretriable error: {err}")
-                            raise UnretriableError from err
-                    except Exception as e:
-                        if "Connection timeout" in str(e):
-                            raise
-                        else:
-                            logger.exception(f"{func.__name__} raised unretriable exception: {e}")
-                            raise UnretriableError from e
-        except Exception as e:
-            logger.exception(f"{func.__name__}: {e}")
-            # 最后一次尝试，不再捕获异常
-            async with self.rate_limiter():
-                return await func(self, *args, **kwargs)
+        return await self._request_core(func, *args, **kwargs)
 
     return wrapper  # type: ignore[return-value]
 
@@ -155,7 +118,7 @@ class Client(tb.Client):  # type: ignore[misc]
         *args: Any,
         limiter: AsyncLimiter | None = None,
         semaphore: asyncio.Semaphore | None = None,
-        cooldown_seconds_429: float = 0.0,
+        cooldown_429: float = 0.0,
         **kwargs: Any,
     ):
         """初始化扩展的aiotieba客户端。
@@ -170,9 +133,22 @@ class Client(tb.Client):  # type: ignore[misc]
         super().__init__(*args, **kwargs)
         self._limiter = limiter
         self._semaphore = semaphore
-        self._cooldown_seconds_429 = cooldown_seconds_429
+        self._cooldown_429 = cooldown_429
         self._cooldown_until: float = 0.0
-        self._cooldown_lock = asyncio.Lock()
+
+        self._retry_strategy = AsyncRetrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential_jitter(initial=0.5, max=5.0),
+            retry=retry_if_exception_type((
+                OSError,
+                asyncio.TimeoutError,
+                ConnectionError,
+                HTTPStatusError,
+                TiebaServerError,
+                RetriableApiError,
+            )),
+            reraise=True,
+        )
 
     async def __aenter__(self) -> Client:
         await super().__aenter__()
@@ -186,12 +162,6 @@ class Client(tb.Client):  # type: ignore[misc]
     ) -> None:
         await super().__aexit__(exc_type, exc_val, exc_tb)
 
-    async def set_cooldown(self, duration: float) -> None:
-        """设置全局冷却时间，防止多个任务同时设置。"""
-        async with self._cooldown_lock:
-            cooldown_end_time = time.monotonic() + duration
-            self._cooldown_until = max(self._cooldown_until, cooldown_end_time)
-
     @property
     def limiter(self) -> AsyncLimiter | None:
         """获取速率限制器。"""
@@ -203,20 +173,39 @@ class Client(tb.Client):  # type: ignore[misc]
         return self._semaphore
 
     @asynccontextmanager
-    async def rate_limiter(self) -> AsyncGenerator[None, None]:
-        """获取速率限制和并发控制的上下文管理器，并处理全局冷却。"""
-        now = time.monotonic()
-        if now < self._cooldown_until:
-            wait_time = self._cooldown_until - now
-            logger.debug("Global cooldown active. Waiting for %.1f seconds.", wait_time)
-            await asyncio.sleep(wait_time)
-
+    async def _with_limits(self) -> AsyncGenerator[None, None]:
+        """内部限流上下文管理器"""
         async with AsyncExitStack() as stack:
-            if self.limiter is not None:
-                await stack.enter_async_context(self.limiter)
-            if self.semaphore is not None:
-                await stack.enter_async_context(self.semaphore)
+            if self._limiter:
+                await stack.enter_async_context(self._limiter)
+            if self._semaphore:
+                await stack.enter_async_context(self._semaphore)
             yield
+
+    async def _request_core(self, func: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any) -> Any:
+        """核心调度逻辑，处理限流、熔断和错误转换"""
+        async for attempt in self._retry_strategy:
+            with attempt:
+                now = time.monotonic()
+                if now < self._cooldown_until:
+                    wait_time = self._cooldown_until - now
+                    logger.debug("Global cooldown active. Waiting for {:.1f}s", wait_time)
+                    await asyncio.sleep(wait_time)
+
+                async with self._with_limits():
+                    result = await func(self, *args, **kwargs)
+
+                try:
+                    ErrorHandler.check(result)
+                except RetriableApiError as e:
+                    if e.code == 429 and self._cooldown_429 > 0:
+                        self._cooldown_until = time.monotonic() + self._cooldown_429
+                    logger.warning("Retrying {} due to: {}", func.__name__, e)
+                    raise
+                except UnretriableApiError:
+                    raise
+
+                return result
 
     # 以下为直接返回DTO模型的封装方法
 
