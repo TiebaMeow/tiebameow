@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Literal, cast
 
@@ -7,6 +8,7 @@ import yarl
 
 from ..client import Client
 from ..models.dto import BaseUserDTO, PostDTO, ThreadDTO
+from ..utils.logger import logger
 
 
 class ContextBase(ABC):
@@ -64,13 +66,16 @@ class DefaultContext(ContextBase):
             await self.client.__aexit__(None, None, None)
             self.client = None
 
-    async def get_portrait(self, portrait: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "m") -> bytes:
+    async def get_portrait(self, portrait: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s") -> bytes:
         client = await self.get_client()
 
         if isinstance(portrait, ThreadDTO):
             portrait = portrait.author.portrait
         elif isinstance(portrait, BaseUserDTO):
             portrait = portrait.portrait
+
+        if not portrait:
+            return b""
 
         if size == "s":
             path = "n"
@@ -82,37 +87,46 @@ class DefaultContext(ContextBase):
             raise ValueError("Size must be one of 's', 'm', or 'l'.")
 
         img_url = yarl.URL.build(scheme="http", host="tb.himg.baidu.com", path=f"/sys/portrait{path}/item/{portrait}")
-        response = await client.get_image_bytes(str(img_url))
+        try:
+            response = await client.get_image_bytes(str(img_url))
+        except Exception as e:
+            logger.error(f"Failed to get portrait image from {img_url}: {e}")
+            return b""
         return cast("bytes", response.data)
+
+    async def _get_image(self, image_hash: str, size: Literal["s", "m", "l"] = "s") -> bytes:
+        if not image_hash:
+            return b""
+
+        client = await self.get_client()
+
+        if size == "s":
+            img_url = yarl.URL.build(
+                scheme="http", host="imgsrc.baidu.com", path=f"/forum/w=720;q=60;g=0/sign=__/{image_hash}.jpg"
+            )
+        elif size == "m":
+            img_url = yarl.URL.build(
+                scheme="http", host="imgsrc.baidu.com", path=f"/forum/w=960;q=60;g=0/sign=__/{image_hash}.jpg"
+            )
+        elif size == "l":
+            img_url = yarl.URL.build(scheme="http", host="imgsrc.baidu.com", path=f"/forum/pic/item/{image_hash}.jpg")
+        else:
+            raise ValueError("Size must be one of 's', 'm', or 'l'.")
+
+        try:
+            response = await client.get_image_bytes(str(img_url))
+            return cast("bytes", response.data)
+        except Exception as e:
+            logger.error(f"Failed to get image from {img_url}: {e}")
+            return b""
 
     async def get_content_images(
         self, content: ThreadDTO | PostDTO, size: Literal["s", "m", "l"] = "s", max_count: int | None = None
     ) -> list[bytes]:
-        client = await self.get_client()
-
         images = content.images
         if max_count is not None:
             images = images[:max_count]
 
-        images_bytes = []
-
-        for image in images:
-            if size == "s":
-                img_url = yarl.URL.build(
-                    scheme="http", host="imgsrc.baidu.com", path=f"/forum/w=720;q=60;g=0/sign=__/{image.hash}.jpg"
-                )
-            elif size == "m":
-                img_url = yarl.URL.build(
-                    scheme="http", host="imgsrc.baidu.com", path=f"/forum/w=960;q=60;g=0/sign=__/{image.hash}.jpg"
-                )
-            elif size == "l":
-                img_url = yarl.URL.build(
-                    scheme="http", host="imgsrc.baidu.com", path=f"/forum/pic/item/{image.hash}.jpg"
-                )
-            else:
-                raise ValueError("Size must be one of 's', 'm', or 'l'.")
-
-            response = await client.get_image_bytes(str(img_url))
-            images_bytes.append(cast("bytes", response.data))
+        images_bytes = await asyncio.gather(*[self._get_image(image.hash, size=size) for image in images])
 
         return images_bytes
