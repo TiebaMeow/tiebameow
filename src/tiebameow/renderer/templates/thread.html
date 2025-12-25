@@ -37,6 +37,16 @@
             object-fit: cover;
         }
 
+        .avatar-placeholder {
+            background-color: #ccc;
+            color: #666;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            font-weight: bold;
+        }
+
         .user-info {
             display: flex;
             flex-direction: column;
@@ -88,6 +98,18 @@
             display: block;
         }
 
+        .image-placeholder {
+            width: 100%;
+            height: 100%;
+            background-color: #eee;
+            color: #999;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 0.8em;
+            text-align: center;
+        }
+
         .more-count {
             position: absolute;
             top: 0;
@@ -132,6 +154,8 @@
         <div class="header">
             {% if portrait_base64 %}
             <img src="data:image/png;base64,{{ portrait_base64 }}" class="avatar" alt="avatar">
+            {% else %}
+            <div class="avatar avatar-placeholder"></div>
             {% endif %}
             <div class="user-info">
                 <span class="username">{{ thread.author.user_name }}</span>
@@ -146,7 +170,11 @@
         <div class="images">
             {% for img in images_base64s %}
             <div class="image-item">
-                <img src="data:image/png;base64,{{ img }}" alt="image">
+                {% if img %}
+                <img src="data:image/png;base64,{{ img }}" alt="Image {{ loop.index }} for thread {{ thread.title }}">
+                {% else %}
+                <div class="image-placeholder">图片加载失败</div>
+                {% endif %}
                 {% if loop.last and remain_image_count > 0 %}
                 <div class="more-count">+{{ remain_image_count }}</div>
                 {% endif %}
