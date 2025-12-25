@@ -129,7 +129,7 @@ class Renderer:
         if suffix_html:
             data.suffix_html = suffix_html
 
-        if data.portrait_url and data.image_url_list:
+        if (data.portrait_url or not data.portrait) and (data.image_url_list or not data.image_hash_list):
             data.remain_image_count = max(0, len(data.image_hash_list) - len(data.image_url_list))
             image_bytes = await self._render_image("thread.html", config=render_config, data=data.model_dump())
             return image_bytes
