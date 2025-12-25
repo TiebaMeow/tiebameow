@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from asyncio import Lock
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, cast, Literal
 
 from .base import CoreBase
 
@@ -28,13 +28,16 @@ QUALITY_MAP_OUTPUT: dict[str, dict[str, Any]] = {
     "high": {"type": "png"},
 }
 
+VALID_BROWSER_ENGINES = Literal["chromium", "firefox", "webkit"]
+
 
 class PlaywrightCore(CoreBase):
-    def __init__(self) -> None:
+    def __init__(self, browser_engine: VALID_BROWSER_ENGINES | None = None) -> None:
         if not self.check_installed():
             raise ImportError("playwright is not installed. Please install it with 'pip install playwright'.")
 
         self.playwright: Playwright | None = None
+        self.browser_engine = browser_engine
         self.browser: Browser | None = None
         self._lock = Lock()
 
@@ -56,7 +59,26 @@ class PlaywrightCore(CoreBase):
 
                 self.playwright = await async_playwright().start()
 
-            self.browser = await self.playwright.chromium.launch()
+            if self.browser_engine:
+                engine = getattr(self.playwright, self.browser_engine)
+                if not engine:
+                    raise ValueError(f"Invalid browser engine: {self.browser_engine}")
+                try:
+                    self.browser = await engine.launch()
+                except AttributeError:
+                    raise ValueError(f"Invalid browser engine: {self.browser_engine}") from AttributeError
+            else:
+                for engine_name in ["chromium", "firefox", "webkit"]:
+                    engine = getattr(self.playwright, engine_name)
+                    try:
+                        self.browser = await engine.launch()
+                        break
+                    except Exception:
+                        continue
+                else:
+                    self.browser = (
+                        await self.playwright.chromium.launch()
+                    )  # 使用playwright.chromium作为最后的后备选项，展示原始错误
 
     async def close(self) -> None:
         async with self._lock:
