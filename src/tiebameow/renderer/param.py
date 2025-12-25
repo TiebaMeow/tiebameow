@@ -14,10 +14,10 @@ class ThreadRenderParam(BaseModel):
         nick_name: 作者昵称
         level: 作者等级
         portrait: 头像标识符
-        portrait_base64: 头像的 Base64 编码字符串
+        portrait_url: 头像的 URL
         image_hash_list: 帖子中包含的图片哈希列表
-        image_base64_list: 帖子中包含的图片的 Base64 编码字符串列表
-        remain_image_count: 未包含在 image_base64_list 中的图片数量
+        image_url_list: 帖子中包含的图片的 URL 列表
+        remain_image_count: 未包含在 image_url_list 中的图片数量
         prefix_html: 渲染结果前缀 HTML 代码
         suffix_html: 渲染结果后缀 HTML 代码
     """
