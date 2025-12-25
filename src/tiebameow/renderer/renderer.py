@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 from typing import TYPE_CHECKING, Any
 
 import jinja2
@@ -10,7 +9,7 @@ from pydantic import BaseModel
 from ..models.dto import ThreadDTO
 from ..parser import convert_aiotieba_thread
 from .config import Config
-from .context import ContextBase, DefaultContext
+from .context import Base64Context, ContextBase
 from .core import PlaywrightCore
 from .param import ThreadRenderParam
 
@@ -20,25 +19,34 @@ if TYPE_CHECKING:
     from .core.base import CoreBase
 
 
-def bytes2base64(data: bytes) -> str:
-    return base64.b64encode(data).decode("utf-8")
-
-
 def format_date(dt: datetime) -> str:
     return dt.strftime("%Y-%m-%d %H:%M")
 
 
 class Renderer:
+    """
+    渲染器，用于将数据渲染为图像
+
+    Args:
+        core: 渲染核心实例，若为 None 则使用默认的 PlaywrightCore
+        context: 渲染上下文类，若为 None 则使用默认的 Base64Context
+        config: 渲染配置，若为 None 则使用默认配置
+    """
+
     def __init__(
-        self, core: CoreBase | None = None, context: ContextBase | None = None, config: Config | None = None
+        self, core: CoreBase | None = None, context: type[ContextBase] | None = None, config: Config | None = None
     ) -> None:
         if core is None:
             core = PlaywrightCore()
         self.core = core
 
         if context is None:
-            context = DefaultContext()
-        self.context = context
+            context = Base64Context
+        # 检查是否是实例，如果是，则取其类
+        elif not isinstance(context, type):
+            context = context.__class__
+
+        self.context: type[ContextBase] = context
 
         if config is None:
             config = Config()
@@ -69,8 +77,10 @@ class Renderer:
     async def _render_image(
         self, template_name: str, config: Config | None = None, data: BaseModel | dict[str, Any] | None = None
     ) -> bytes:
+        import asyncio
         html = await self._render_html(template_name, data or {})
         image_bytes = await self.core.render(html, config or self.config)
+        await asyncio.sleep(0.5)  # 让出控制权，防止某些情况下的死锁
         return image_bytes
 
     async def render_thread(
@@ -125,17 +135,24 @@ class Renderer:
         if suffix_html:
             data.suffix_html = suffix_html
 
-        if not data.portrait_base64:
-            if data.portrait:
-                data.portrait_base64 = bytes2base64(await self.context.get_portrait(data.portrait, size="m"))
-            else:
-                data.portrait_base64 = ""
+        if data.portrait_url and data.image_url_list:
+            data.remain_image_count = max(0, len(data.image_hash_list) - len(data.image_url_list))
+            image_bytes = await self._render_image("thread.html", config=render_config, data=data.model_dump())
+            return image_bytes
 
-        if not data.image_base64_list and data.image_hash_list:
-            image_bytes_list = await self.context.get_images(data.image_hash_list, size="s", max_count=max_image_count)
-            data.image_base64_list = [bytes2base64(img) for img in image_bytes_list]
+        async with self.context() as ctx:
+            if not data.portrait_url:
+                if data.portrait:
+                    data.portrait_url = await ctx.get_portrait_url(data.portrait, size="m")
+                else:
+                    data.portrait_url = ""
 
-        data.remain_image_count = max(0, len(data.image_hash_list) - len(data.image_base64_list))
+            if not data.image_url_list and data.image_hash_list:
+                data.image_url_list = await ctx.get_image_url_list(
+                    data.image_hash_list, size="s", max_count=max_image_count
+                )
 
-        image_bytes = await self._render_image("thread.html", config=render_config, data=data.model_dump())
-        return image_bytes
+            data.remain_image_count = max(0, len(data.image_hash_list) - len(data.image_url_list))
+
+            image_bytes = await self._render_image("thread.html", config=render_config, data=data.model_dump())
+            return image_bytes

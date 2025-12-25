@@ -152,8 +152,8 @@
         {% endif %}
 
         <div class="header">
-            {% if portrait_base64 %}
-            <img src="data:image/png;base64,{{ portrait_base64 }}" class="avatar" alt="avatar">
+            {% if portrait_url %}
+            <img src="{{ portrait_url }}" class="avatar" alt="avatar">
             {% else %}
             <div class="avatar avatar-placeholder"></div>
             {% endif %}
@@ -166,12 +166,12 @@
         <div class="title">{{ title }}</div>
         <div class="text">{{ text }}</div>
 
-        {% if image_base64_list and image_base64_list | length > 0 %}
+        {% if image_url_list and image_url_list | length > 0 %}
         <div class="images">
-            {% for img in image_base64_list %}
+            {% for img in image_url_list %}
             <div class="image-item">
                 {% if img %}
-                <img src="data:image/png;base64,{{ img }}" alt="Image {{ loop.index }} for thread {{ title }}">
+                <img src="{{ img }}" alt="Image {{ loop.index }} for thread {{ title }}">
                 {% else %}
                 <div class="image-placeholder">图片加载失败</div>
                 {% endif %}
