@@ -20,12 +20,12 @@ class ContextBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_portrait(self, portrait: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s") -> bytes:
+    async def get_portrait(self, data: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s") -> bytes:
         """
         获取头像
 
         Args:
-            portrait: 头像标识符，或包含头像信息的 ThreadDTO 或 BaseUserDTO 实例
+            data: 头像标识符，或包含头像信息的 ThreadDTO 或 BaseUserDTO 实例
             size: 头像尺寸，可选值为 "s", "m", "l"
 
         Returns:
@@ -34,14 +34,14 @@ class ContextBase(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    async def get_content_images(
-        self, content: ThreadDTO | PostDTO, size: Literal["s", "m", "l"] = "s", max_count: int | None = None
+    async def get_images(
+        self, data: ThreadDTO | PostDTO | list[str], size: Literal["s", "m", "l"] = "s", max_count: int | None = None
     ) -> list[bytes]:
         """
         获取内容所包含的图片
 
         Args:
-            content: 包含图片信息的 ThreadDTO 或 PostDTO 实例
+            data: 包含图片信息的 ThreadDTO、PostDTO 实例或图片哈希列表
             size: 图片尺寸，可选值为 "s", "m", "l"
             max_count: 最大获取图片数量，默认为 None（获取所有图片）
 
@@ -66,13 +66,15 @@ class DefaultContext(ContextBase):
             await self.client.__aexit__(None, None, None)
             self.client = None
 
-    async def get_portrait(self, portrait: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s") -> bytes:
+    async def get_portrait(self, data: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s") -> bytes:
         client = await self.get_client()
 
-        if isinstance(portrait, ThreadDTO):
-            portrait = portrait.author.portrait
-        elif isinstance(portrait, BaseUserDTO):
-            portrait = portrait.portrait
+        if isinstance(data, ThreadDTO):
+            portrait = data.author.portrait
+        elif isinstance(data, BaseUserDTO):
+            portrait = data.portrait
+        else:
+            portrait = data
 
         if not portrait:
             return b""
@@ -120,13 +122,17 @@ class DefaultContext(ContextBase):
             logger.error(f"Failed to get image from {img_url}: {e}")
             return b""
 
-    async def get_content_images(
-        self, content: ThreadDTO | PostDTO, size: Literal["s", "m", "l"] = "s", max_count: int | None = None
+    async def get_images(
+        self, data: ThreadDTO | PostDTO | list[str], size: Literal["s", "m", "l"] = "s", max_count: int | None = None
     ) -> list[bytes]:
-        images = content.images
-        if max_count is not None:
-            images = images[:max_count]
+        if isinstance(data, (ThreadDTO, PostDTO)):
+            image_hash_list = [img.hash for img in data.images]
+        else:
+            image_hash_list = data
 
-        images_bytes = await asyncio.gather(*[self._get_image(image.hash, size=size) for image in images])
+        if max_count is not None:
+            image_hash_list = image_hash_list[:max_count]
+
+        images_bytes = await asyncio.gather(*[self._get_image(image_hash, size=size) for image_hash in image_hash_list])
 
         return images_bytes

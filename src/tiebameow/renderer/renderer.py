@@ -7,15 +7,16 @@ import jinja2
 from aiotieba.typing import Thread
 from pydantic import BaseModel
 
+from ..models.dto import ThreadDTO
 from ..parser import convert_aiotieba_thread
 from .config import Config
 from .context import ContextBase, DefaultContext
 from .core import PlaywrightCore
+from .param import ThreadRenderParam
 
 if TYPE_CHECKING:
     from datetime import datetime
 
-    from ..models.dto import ThreadDTO
     from .core.base import CoreBase
 
 
@@ -74,23 +75,23 @@ class Renderer:
 
     async def render_thread(
         self,
-        thread: ThreadDTO | Thread,
+        thread: ThreadDTO | Thread | ThreadRenderParam,
         *,
         width: int = 550,
         max_image_count: int = 9,
-        prefix: str | None = None,
-        suffix: str | None = None,
+        prefix_html: str | None = None,
+        suffix_html: str | None = None,
         **config: Any,
     ) -> bytes:
         """
         渲染帖子为图像
 
         Args:
-            thread: 要渲染的帖子，可以是 ThreadDTO 实例或 aiotieba 的 Thread 实例
+            thread: 要渲染的帖子，可以是 ThreadDTO 实例、aiotieba 的 Thread 实例或 ThreadRenderParam 实例
             width: 渲染图像的原始宽度，默认为 550 (px)
             max_image_count: 最大包含的图片数量，默认为 9
-            prefix: 帖子文本前缀，可选，支持 HTML
-            suffix: 帖子文本后缀，可选，支持 HTML
+            prefix_html: 帖子文本前缀，可选，支持 HTML
+            suffix_html: 帖子文本后缀，可选，支持 HTML
             **config: 其他渲染配置参数
 
         Returns:
@@ -106,21 +107,35 @@ class Renderer:
 
         if isinstance(thread, Thread):
             thread = convert_aiotieba_thread(thread)
+        if isinstance(thread, ThreadDTO):
+            data = ThreadRenderParam(
+                title=thread.title,
+                text=thread.text,
+                create_time=thread.create_time,
+                nick_name=thread.author.nick_name or thread.author.user_name or f"uid:{thread.author.user_id}",
+                level=thread.author.level,
+                portrait=thread.author.portrait,
+                image_hash_list=[img.hash for img in thread.images],
+            )
+        else:
+            data = thread
 
-        portrait_bytes = await self.context.get_portrait(thread.author.portrait, size="m")
-        image_bytes_list = await self.context.get_content_images(thread, size="s", max_count=max_image_count)
+        if prefix_html:
+            data.prefix_html = prefix_html
+        if suffix_html:
+            data.suffix_html = suffix_html
 
-        remain_image_count = max(0, len(thread.images) - len(image_bytes_list))
+        if not data.portrait_base64:
+            if data.portrait:
+                data.portrait_base64 = bytes2base64(await self.context.get_portrait(data.portrait, size="m"))
+            else:
+                data.portrait_base64 = ""
 
-        data = {
-            "portrait_base64": bytes2base64(portrait_bytes),
-            "thread": thread.model_dump(),
-            "images_base64s": [bytes2base64(img) for img in image_bytes_list],
-            "remain_image_count": remain_image_count,
-            "prefix": prefix,
-            "suffix": suffix,
-            "text": thread.text,
-        }
+        if not data.image_base64_list and data.image_hash_list:
+            image_bytes_list = await self.context.get_images(data.image_hash_list, size="s", max_count=max_image_count)
+            data.image_base64_list = [bytes2base64(img) for img in image_bytes_list]
 
-        image_bytes = await self._render_image("thread.html", config=render_config, data=data)
+        data.remain_image_count = max(0, len(data.image_hash_list) - len(data.image_base64_list))
+
+        image_bytes = await self._render_image("thread.html", config=render_config, data=data.model_dump())
         return image_bytes

@@ -147,8 +147,8 @@
 
 <body>
     <div class="container">
-        {% if prefix %}
-        <div class="prefix">{{ prefix | safe }}</div>
+        {% if prefix_html %}
+        <div class="prefix">{{ prefix_html | safe }}</div>
         {% endif %}
 
         <div class="header">
@@ -158,20 +158,20 @@
             <div class="avatar avatar-placeholder"></div>
             {% endif %}
             <div class="user-info">
-                <span class="username">{{ thread.author.user_name }}</span>
-                <span class="sub">Lv.{{ thread.author.level }} · {{ thread.create_time | format_date }}</span>
+                <span class="username">{{ nick_name }}</span>
+                <span class="sub">Lv.{{ level }} · {{ create_time | format_date }}</span>
             </div>
         </div>
 
-        <div class="title">{{ thread.title }}</div>
+        <div class="title">{{ title }}</div>
         <div class="text">{{ text }}</div>
 
-        {% if images_base64s and images_base64s | length > 0 %}
+        {% if image_base64_list and image_base64_list | length > 0 %}
         <div class="images">
-            {% for img in images_base64s %}
+            {% for img in image_base64_list %}
             <div class="image-item">
                 {% if img %}
-                <img src="data:image/png;base64,{{ img }}" alt="Image {{ loop.index }} for thread {{ thread.title }}">
+                <img src="data:image/png;base64,{{ img }}" alt="Image {{ loop.index }} for thread {{ title }}">
                 {% else %}
                 <div class="image-placeholder">图片加载失败</div>
                 {% endif %}
@@ -183,8 +183,8 @@
         </div>
         {% endif %}
 
-        {% if suffix %}
-        <div class="suffix">{{ suffix | safe }}</div>
+        {% if suffix_html %}
+        <div class="suffix">{{ suffix_html | safe }}</div>
         {% endif %}
     </div>
 </body>
