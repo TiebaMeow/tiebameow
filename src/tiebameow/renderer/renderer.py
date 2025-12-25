@@ -42,10 +42,6 @@ class Renderer:
 
         if context is None:
             context = Base64Context
-        # 检查是否是实例，如果是，则取其类
-        elif not isinstance(context, type):
-            context = context.__class__
-
         self.context: type[ContextBase] = context
 
         if config is None:
@@ -77,10 +73,8 @@ class Renderer:
     async def _render_image(
         self, template_name: str, config: Config | None = None, data: BaseModel | dict[str, Any] | None = None
     ) -> bytes:
-        import asyncio
         html = await self._render_html(template_name, data or {})
         image_bytes = await self.core.render(html, config or self.config)
-        await asyncio.sleep(0.5)  # 让出控制权，防止某些情况下的死锁
         return image_bytes
 
     async def render_thread(
