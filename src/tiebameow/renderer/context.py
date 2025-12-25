@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import shutil
+import tempfile
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Literal, cast
+from uuid import uuid4
 
 import yarl
 
@@ -187,4 +191,71 @@ class Base64Context(ContextBase):
     ) -> list[str]:
         images_bytes = await get_images(await self.get_client(), data, size=size, max_count=max_count)
         image_urls = [f"data:image/jpeg;base64,{self.bytes2base64(img_bytes)}" for img_bytes in images_bytes]
+        return image_urls
+
+
+class FileContext(ContextBase):
+    """
+    渲染上下文，使用本地临时文件作为资源
+
+    *注意：使用此上下文时，需确保 PlaywrightCore 启用了本地文件访问权限 (enable_local_file_access=True)*
+    """
+
+    # TODO use async method
+
+    base_dir = Path(tempfile.gettempdir()) / "tiebameow_renderer"
+    client: Client | None = None
+
+    def __init__(self) -> None:
+        self.task_dir = self.base_dir / uuid4().hex
+        if not self.task_dir.exists():
+            self.task_dir.mkdir(parents=True, exist_ok=True)
+
+    @classmethod
+    async def close(cls) -> None:
+        if cls.base_dir.exists():
+            shutil.rmtree(cls.base_dir, ignore_errors=True)
+        if cls.client is not None:
+            await cls.client.__aexit__(None, None, None)
+            cls.client = None
+
+    @classmethod
+    async def get_client(cls) -> Client:
+        if cls.client is None:
+            cls.client = Client()
+            await cls.client.__aenter__()
+        return cls.client
+
+    async def __aenter__(self) -> FileContext:
+        return self
+
+    async def __aexit__(
+        self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any | None
+    ) -> None:
+        if self.task_dir.exists():
+            shutil.rmtree(self.task_dir, ignore_errors=True)
+
+    async def get_portrait_url(self, data: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s") -> str:
+        if isinstance(data, ThreadDTO):
+            portrait = data.author.portrait
+        elif isinstance(data, BaseUserDTO):
+            portrait = data.portrait
+        else:
+            portrait = data
+        portrait_bytes = await get_portrait(await self.get_client(), portrait, size=size)
+        file_path = self.task_dir / f"portrait_{portrait}_{size}.jpg"
+        with file_path.open("wb") as f:
+            f.write(portrait_bytes)
+        return file_path.as_uri()
+
+    async def get_image_url_list(
+        self, data: ThreadDTO | PostDTO | list[str], size: Literal["s", "m", "l"] = "s", max_count: int | None = None
+    ) -> list[str]:
+        images_bytes = await get_images(await self.get_client(), data, size=size, max_count=max_count)
+        image_urls = []
+        for idx, img_bytes in enumerate(images_bytes):
+            file_path = self.task_dir / f"image_{uuid4().hex if isinstance(data, list) else data.pid}_{idx}_{size}.jpg"
+            with file_path.open("wb") as f:
+                f.write(img_bytes)
+            image_urls.append(file_path.as_uri())
         return image_urls

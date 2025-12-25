@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import tempfile
 from asyncio import Lock
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 from .base import CoreBase
@@ -32,10 +34,13 @@ VALID_BROWSER_ENGINES = Literal["chromium", "firefox", "webkit"]
 
 
 class PlaywrightCore(CoreBase):
-    def __init__(self, browser_engine: VALID_BROWSER_ENGINES | None = None) -> None:
+    def __init__(
+        self, browser_engine: VALID_BROWSER_ENGINES | None = None, enable_local_file_access: bool = False
+    ) -> None:
         if not self.check_installed():
             raise ImportError("playwright is not installed. Please install it with 'pip install playwright'.")
 
+        self.enable_local_file_access = enable_local_file_access
         self.playwright: Playwright | None = None
         self.browser_engine = browser_engine
         self.browser: Browser | None = None
@@ -96,6 +101,21 @@ class PlaywrightCore(CoreBase):
         browser = cast("Browser", self.browser)
         async with await browser.new_page(device_scale_factor=QUALITY_MAP_SCALE[config.quality]) as page:
             await page.set_viewport_size({"width": config.width, "height": config.height})
-            await page.set_content(html)
-            screenshot = await page.screenshot(full_page=True, **QUALITY_MAP_OUTPUT[config.quality])
+
+            if self.enable_local_file_access:
+                with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".html", delete=False) as f:
+                    f.write(html)
+                    temp_path = Path(f.name)
+
+                try:
+                    await page.goto(temp_path.as_uri())
+                    await page.wait_for_load_state("networkidle")
+                    screenshot = await page.screenshot(full_page=True, **QUALITY_MAP_OUTPUT[config.quality])
+                finally:
+                    temp_path.unlink(missing_ok=True)  # noqa: ASYNC240
+                    # TODO use async method
+            else:
+                await page.set_content(html)
+                await page.wait_for_load_state("networkidle")
+                screenshot = await page.screenshot(full_page=True, **QUALITY_MAP_OUTPUT[config.quality])
             return screenshot
