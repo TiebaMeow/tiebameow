@@ -36,17 +36,17 @@ class ThreadRenderParam(BaseModel):
 
     portrait: str = ""
 
-    portrait_base64: str = ""
-    """头像的 Base64 编码字符串。如果提供此字段，则优先使用此字段渲染头像。否则使用 portrait 字段获取头像。"""
+    portrait_url: str = ""
+    """头像的 url。如果提供此字段，则优先使用此字段渲染头像。否则使用 portrait 字段获取头像。"""
 
     image_hash_list: list[str] = []
 
-    image_base64_list: list[str] = []
-    """帖子中包含的图片的 Base64 编码字符串列表。如果提供此字段，
+    image_url_list: list[str] = []
+    """帖子中包含的图片的 url 列表。如果提供此字段，
     则优先使用此字段渲染图片。否则使用 image_hash_list 字段获取图片。"""
 
     remain_image_count: int = 0
-    """未包含在 image_base64_list 中的图片数量。自动计算填写，无需手动设置。"""
+    """未包含在 image_url_list 中的图片数量。自动计算填写，无需手动设置。"""
 
     prefix_html: str = ""
 

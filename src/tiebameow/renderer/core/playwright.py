@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from asyncio import Lock
-from typing import TYPE_CHECKING, Any, cast, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from .base import CoreBase
 
