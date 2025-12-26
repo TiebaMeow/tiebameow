@@ -8,6 +8,7 @@ from functools import wraps
 from typing import TYPE_CHECKING, Any
 
 import aiotieba as tb
+from aiohttp import ClientError, ServerConnectionError, ServerTimeoutError
 from aiotieba.exception import BoolResponse, HTTPStatusError, IntResponse, StrResponse, TiebaServerError
 from tenacity import (
     AsyncRetrying,
@@ -60,18 +61,19 @@ class UnretriableApiError(AiotiebaError):
 
 class ErrorHandler:
     RETRIABLE_CODES: set[int] = {
-        -65536,
-        11,
-        77,
-        408,
-        429,
-        4011,
-        110001,
-        220034,
-        230871,
-        300000,
-        1989005,
-        2210002,
+        -65536,  # 超时
+        11,  # 系统繁忙
+        77,  # 操作失败
+        408,  # 请求超时
+        429,  # 过多请求
+        4011,  # 需要验证码
+        110001,  # 未知错误
+        110004,  # tieba_uid2user_info 接口错误
+        220034,  # 操作过于频繁
+        230871,  # 发贴/删贴过于频繁
+        300000,  # 旧版客户端API无法封禁用户名为空用户
+        1989005,  # 加载数据失败
+        2210002,  # 系统错误
         28113295,
     }
 
@@ -138,20 +140,10 @@ class Client(tb.Client):  # type: ignore[misc]
         self._semaphore = semaphore
         self._cooldown_429 = cooldown_429
         self._cooldown_until: float = 0.0
-
-        self._retry_strategy = AsyncRetrying(
-            stop=stop_after_attempt(retry_attempts),
-            wait=wait_exponential_jitter(initial=wait_initial, max=wait_max),
-            retry=retry_if_exception_type((
-                OSError,
-                asyncio.TimeoutError,
-                ConnectionError,
-                HTTPStatusError,
-                TiebaServerError,
-                RetriableApiError,
-            )),
-            reraise=True,
-        )
+        self._cooldown_lock = asyncio.Lock()
+        self._retry_attempts = retry_attempts
+        self._wait_initial = wait_initial
+        self._wait_max = wait_max
 
     async def __aenter__(self) -> Client:
         await super().__aenter__()
@@ -185,13 +177,45 @@ class Client(tb.Client):  # type: ignore[misc]
                 await stack.enter_async_context(self._semaphore)
             yield
 
+    def _retry_strategy(self) -> AsyncRetrying:
+        """为每次请求创建重试器"""
+        return AsyncRetrying(
+            stop=stop_after_attempt(self._retry_attempts),
+            wait=wait_exponential_jitter(initial=self._wait_initial, max=self._wait_max),
+            retry=retry_if_exception_type((
+                OSError,
+                TimeoutError,
+                ConnectionError,
+                ServerTimeoutError,
+                ServerConnectionError,
+                ClientError,
+                HTTPStatusError,
+                TiebaServerError,
+                RetriableApiError,
+            )),
+            reraise=True,
+        )
+
+    async def _update_cooldown_until(self) -> None:
+        """延长全局冷却截止时间"""
+        async with self._cooldown_lock:
+            new_until = time.monotonic() + self._cooldown_429
+            if new_until > self._cooldown_until:
+                self._cooldown_until = new_until
+
+    async def _get_cooldown_wait(self) -> float:
+        """获取当前需要等待的全局冷却时间（秒）"""
+        async with self._cooldown_lock:
+            now = time.monotonic()
+            return max(0.0, self._cooldown_until - now)
+
     async def _request_core(self, func: Callable[..., Awaitable[Any]], *args: Any, **kwargs: Any) -> Any:
         """核心调度逻辑，处理限流、熔断和错误转换"""
-        async for attempt in self._retry_strategy:
+        retrying = self._retry_strategy()
+        async for attempt in retrying:
             with attempt:
-                now = time.monotonic()
-                if now < self._cooldown_until:
-                    wait_time = self._cooldown_until - now
+                wait_time = await self._get_cooldown_wait()
+                if wait_time > 0:
                     logger.debug("Global cooldown active. Waiting for {:.1f}s", wait_time)
                     await asyncio.sleep(wait_time)
 
@@ -202,7 +226,7 @@ class Client(tb.Client):  # type: ignore[misc]
                     ErrorHandler.check(result)
                 except RetriableApiError as e:
                     if e.code == 429 and self._cooldown_429 > 0:
-                        self._cooldown_until = time.monotonic() + self._cooldown_429
+                        await self._update_cooldown_until()
                     logger.warning("Retrying {} due to: {}", func.__name__, e)
                     raise
                 except UnretriableApiError:

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import time
+import types
 from typing import Any, NamedTuple
 from unittest.mock import AsyncMock, patch
 
@@ -28,17 +30,21 @@ class _AsyncCM:
 
 
 def _set_no_wait_retry(client: Client, *, attempts: int = 3) -> None:
-    client._retry_strategy = AsyncRetrying(
-        stop=stop_after_attempt(attempts),
-        wait=wait_none(),
-        retry=retry_if_exception_type((
-            OSError,
-            asyncio.TimeoutError,
-            ConnectionError,
-            RetriableApiError,
-        )),
-        reraise=True,
-    )
+    def _strategy(self: Client) -> AsyncRetrying:
+        return AsyncRetrying(
+            stop=stop_after_attempt(attempts),
+            wait=wait_none(),
+            retry=retry_if_exception_type((
+                OSError,
+                TimeoutError,
+                ConnectionError,
+                RetriableApiError,
+            )),
+            reraise=True,
+        )
+
+    # 以实例属性覆盖方法，便于测试自定义重试配置。
+    client._retry_strategy = types.MethodType(_strategy, client)  # type: ignore[method-assign]
 
 
 @pytest.mark.asyncio
@@ -162,3 +168,42 @@ async def test_wrapped_get_threads_calls_super() -> None:
 
     assert res == "threads"
     mock_super.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_requests_do_not_share_retry_state() -> None:
+    client = Client()
+    _set_no_wait_retry(client, attempts=2)
+
+    # 每个并发请求各自第一次超时、第二次成功。
+    calls_by_task: dict[str, int] = {}
+
+    async def call(self: Client) -> _Result:
+        task = asyncio.current_task()
+        assert task is not None
+        name = task.get_name()
+        calls_by_task[name] = calls_by_task.get(name, 0) + 1
+        if calls_by_task[name] == 1:
+            raise TimeoutError("timeout")
+        return _Result(None)
+
+    t1 = asyncio.create_task(client._request_core(call), name="t1")
+    t2 = asyncio.create_task(client._request_core(call), name="t2")
+    res1, res2 = await asyncio.gather(t1, t2)
+
+    assert isinstance(res1, _Result)
+    assert isinstance(res2, _Result)
+    assert calls_by_task["t1"] == 2
+    assert calls_by_task["t2"] == 2
+
+
+@pytest.mark.asyncio
+async def test_cooldown_until_never_decreases_under_concurrency() -> None:
+    client = Client(cooldown_429=0.1)
+
+    # 预先设置一个“更远的冷却截止时间”，后续更新不应把它覆盖为更小值。
+    initial = time.monotonic() + 10.0
+    client._cooldown_until = initial
+
+    await asyncio.gather(client._update_cooldown_until(), client._update_cooldown_until())
+    assert client._cooldown_until >= initial
