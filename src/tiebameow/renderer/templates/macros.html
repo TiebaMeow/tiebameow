@@ -1,0 +1,66 @@
+{% macro avatar(url) %}
+    {% if url %}
+    <img src="{{ url }}" class="avatar" alt="avatar">
+    {% else %}
+    <div class="avatar avatar-placeholder"></div>
+    {% endif %}
+{% endmacro %}
+
+{% macro user_info(name, level, time, sub_text=None) %}
+<div class="user-info">
+    <span class="username">{{ name }}</span>
+    <span class="sub">Lv.{{ level }} · {{ time | format_date }} {% if sub_text %} · {{ sub_text }}{% endif %}</span>
+</div>
+{% endmacro %}
+
+{% macro images(image_list, remain_count=0) %}
+{% if image_list and image_list | length > 0 %}
+<div class="images">
+    {% for img in image_list %}
+    <div class="image-item">
+        {% if img %}
+        <img src="{{ img }}" alt="Image">
+        {% else %}
+        <div class="image-placeholder">图片加载失败</div>
+        {% endif %}
+        {% if loop.last and remain_count > 0 %}
+        <div class="more-count">+{{ remain_count }}</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
+{% macro content_item(item, is_thread=False) %}
+<div class="item {% if is_thread %}thread-item{% else %}post-item{% endif %}">
+    <div class="header">
+        {{ avatar(item.portrait_url) }}
+        {{ user_info(item.nick_name, item.level, item.create_time, item.floor_text) }}
+    </div>
+
+    {% if item.title %}
+    <div class="title">{{ item.title }}</div>
+    {% endif %}
+
+    <div class="text">{{ item.text }}</div>
+
+    {{ images(item.image_url_list, item.remain_image_count) }}
+    
+    {% if item.comments %}
+    <div class="comments">
+        {% for comment in item.comments %}
+        <div class="comment-item">
+            <div class="comment-header">
+                <span class="comment-user">{{ comment.nick_name }}:</span>
+                <span class="comment-text">{{ comment.text }}</span>
+            </div>
+            <div class="comment-footer">
+                <span class="comment-time">{{ comment.create_time | format_date }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endmacro %}

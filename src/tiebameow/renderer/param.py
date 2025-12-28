@@ -61,3 +61,32 @@ class ThreadRenderParam(BaseModel):
                 v = v / 1000
             return datetime.fromtimestamp(v)
         return v
+
+
+class CommentRenderParam(BaseModel):
+    nick_name: str
+    text: str
+    create_time: datetime | int | float
+
+    @field_validator("create_time", mode="before")
+    @classmethod
+    def convert_timestamp(cls, v: int | float | datetime) -> datetime:
+        if isinstance(v, (int, float)):
+            if v > 1e11:
+                v = v / 1000
+            return datetime.fromtimestamp(v)
+        return v
+
+
+class PostRenderParam(ThreadRenderParam):
+    title: str = ""
+    floor_text: str = ""
+    comments: list[CommentRenderParam] = []
+
+
+class ThreadDetailRenderParam(BaseModel):
+    thread: ThreadRenderParam
+    posts: list[PostRenderParam] = []
+
+    prefix_html: str = ""
+    suffix_html: str = ""
