@@ -73,6 +73,19 @@ class ContextBase(ABC):
         """
         raise NotImplementedError
 
+    @abstractmethod
+    async def get_forum_icon_url(self, fname: str) -> str:
+        """
+        获取贴吧图标URL
+
+        Args:
+            fname: 贴吧名称
+
+        Returns:
+            贴吧图标的URL
+        """
+        raise NotImplementedError
+
 
 async def get_portrait(
     client: Client, data: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s"
@@ -150,6 +163,27 @@ async def get_images(
     return images_bytes
 
 
+async def get_forum_icon(client: Client, fname: str) -> bytes:
+    if not fname:
+        return b""
+
+    try:
+        forum_info = await client.get_forum(fname)
+    except Exception as e:
+        logger.error(f"Failed to get forum info for {fname}: {e}")
+        return b""
+
+    if not forum_info or not forum_info.small_avatar:
+        return b""
+
+    try:
+        response = await client.get_image_bytes(forum_info.small_avatar)
+        return cast("bytes", response.data)
+    except Exception as e:
+        logger.error(f"Failed to get forum icon image from {forum_info.small_avatar}: {e}")
+        return b""
+
+
 class Base64Context(ContextBase):
     """
     渲染上下文，使用 Base64 编码的图片数据作为资源
@@ -192,6 +226,10 @@ class Base64Context(ContextBase):
         images_bytes = await get_images(await self.get_client(), data, size=size, max_count=max_count)
         image_urls = [f"data:image/jpeg;base64,{self.bytes2base64(img_bytes)}" for img_bytes in images_bytes]
         return image_urls
+
+    async def get_forum_icon_url(self, fname: str) -> str:
+        icon_bytes = await get_forum_icon(await self.get_client(), fname)
+        return f"data:image/jpeg;base64,{self.bytes2base64(icon_bytes)}"
 
 
 class FileContext(ContextBase):
@@ -259,3 +297,10 @@ class FileContext(ContextBase):
                 f.write(img_bytes)
             image_urls.append(file_path.as_uri())
         return image_urls
+
+    async def get_forum_icon_url(self, fname: str) -> str:
+        icon_bytes = await get_forum_icon(await self.get_client(), fname)
+        file_path = self.task_dir / f"forum_icon_{fname}.jpg"
+        with file_path.open("wb") as f:
+            f.write(icon_bytes)
+        return file_path.as_uri()

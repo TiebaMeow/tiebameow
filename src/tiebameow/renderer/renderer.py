@@ -3,15 +3,16 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 import jinja2
-from aiotieba.typing import Thread
+from aiotieba.typing import Post, Thread
 from pydantic import BaseModel
 
-from ..models.dto import ThreadDTO
+from ..models.dto import PostDTO, ThreadDTO
 from ..parser import convert_aiotieba_thread
 from .config import Config
 from .context import Base64Context, ContextBase
 from .core import PlaywrightCore
-from .param import ThreadRenderParam
+from .param import BaseContent, PostContent, RenderContentParam, RenderThreadDetailParam, ThreadContent
+from .style import FONT_STYLE
 
 if TYPE_CHECKING:
     from datetime import datetime
@@ -77,25 +78,46 @@ class Renderer:
         image_bytes = await self.core.render(html, config or self.config)
         return image_bytes
 
-    async def render_thread(
+    async def _fill_content_urls(self, ctx: ContextBase, content: BaseContent, max_image_count: int) -> None:
+        if not content.portrait_url:
+            if content.portrait:
+                content.portrait_url = await ctx.get_portrait_url(content.portrait, size="m")
+            else:
+                content.portrait_url = ""
+
+        if not content.image_url_list and content.image_hash_list:
+            content.image_url_list = await ctx.get_image_url_list(
+                content.image_hash_list, size="s", max_count=max_image_count
+            )
+
+        content.remain_image_count = max(0, len(content.image_hash_list) - len(content.image_url_list))
+
+    async def _fill_forum_icon_url(self, ctx: ContextBase, param: RenderThreadDetailParam) -> None:
+        if param.need_fill_url:
+            icon_url = await ctx.get_forum_icon_url(param.forum)
+            param.forum_icon_url = icon_url
+
+    async def render_content(
         self,
-        thread: ThreadDTO | Thread | ThreadRenderParam,
+        content: ThreadDTO | Thread | PostDTO | Post | RenderContentParam,
         *,
-        width: int = 550,
+        width: int = 500,
         max_image_count: int = 9,
         prefix_html: str | None = None,
         suffix_html: str | None = None,
+        title: str = "",
         **config: Any,
     ) -> bytes:
         """
-        渲染帖子为图像
+        渲染内容（帖子或回复）为图像
 
         Args:
-            thread: 要渲染的帖子，可以是 ThreadDTO 实例、aiotieba 的 Thread 实例或 ThreadRenderParam 实例
-            width: 渲染图像的原始宽度，默认为 550 (px)
+            content: 要渲染的内容，可以是 Thread/Post 相关对象
+            width: 渲染图像的原始宽度，默认为 500 (px)
             max_image_count: 最大包含的图片数量，默认为 9
-            prefix_html: 帖子文本前缀，可选，支持 HTML
-            suffix_html: 帖子文本后缀，可选，支持 HTML
+            prefix_html: 文本前缀，可选，支持 HTML
+            suffix_html: 文本后缀，可选，支持 HTML
+            title: 覆盖标题，可选
             **config: 其他渲染配置参数
 
         Returns:
@@ -109,44 +131,113 @@ class Renderer:
             }
         )
 
-        if isinstance(thread, Thread):
-            thread = convert_aiotieba_thread(thread)
-        if isinstance(thread, ThreadDTO):
-            data = ThreadRenderParam(
-                title=thread.title,
-                text=thread.text,
-                create_time=thread.create_time,
-                nick_name=thread.author.nick_name or thread.author.user_name or f"uid:{thread.author.user_id}",
-                level=thread.author.level,
-                portrait=thread.author.portrait,
-                image_hash_list=[img.hash for img in thread.images],
-            )
+        if isinstance(content, RenderContentParam):
+            param = content
         else:
-            data = thread
+            param = RenderContentParam.from_dto(content)
+
+        if title and isinstance(param.content, ThreadContent):
+            param.content.title = title
 
         if prefix_html:
-            data.prefix_html = prefix_html
+            param.prefix_html = prefix_html
         if suffix_html:
-            data.suffix_html = suffix_html
-
-        if (data.portrait_url or not data.portrait) and (data.image_url_list or not data.image_hash_list):
-            data.remain_image_count = max(0, len(data.image_hash_list) - len(data.image_url_list))
-            image_bytes = await self._render_image("thread.html", config=render_config, data=data.model_dump())
-            return image_bytes
+            param.suffix_html = suffix_html
 
         async with self.context() as ctx:
-            if not data.portrait_url:
-                if data.portrait:
-                    data.portrait_url = await ctx.get_portrait_url(data.portrait, size="m")
-                else:
-                    data.portrait_url = ""
+            await self._fill_content_urls(ctx, param.content, max_image_count)
 
-            if not data.image_url_list and data.image_hash_list:
-                data.image_url_list = await ctx.get_image_url_list(
-                    data.image_hash_list, size="s", max_count=max_image_count
-                )
+            data = {
+                **param.model_dump(),
+                "style_list": [FONT_STYLE],
+            }
 
-            data.remain_image_count = max(0, len(data.image_hash_list) - len(data.image_url_list))
+            image_bytes = await self._render_image("thread.html", config=render_config, data=data)
+            return image_bytes
 
-            image_bytes = await self._render_image("thread.html", config=render_config, data=data.model_dump())
+    async def render_thread_detail(
+        self,
+        thread_or_param: ThreadDTO | Thread | ThreadContent | RenderThreadDetailParam,
+        posts: list[PostDTO | Post | PostContent] | None = None,
+        *,
+        width: int = 500,
+        max_image_count: int = 9,
+        prefix_html: str | None = None,
+        suffix_html: str | None = None,
+        ignore_first_floor: bool = True,
+        show_thread_info: bool = True,
+        show_link: bool = True,
+        **config: Any,
+    ) -> bytes:
+        """
+        渲染帖子详情（包含回复）为图像
+
+        Args:
+            thread_or_param: 要渲染的帖子，或包含帖子与回复的渲染参数对象
+            posts: 要渲染的回复列表
+            width: 渲染图像的原始宽度，默认为 500 (px)
+            max_image_count: 每个楼层最大包含的图片数量，默认为 9
+            prefix_html: 帖子文本前缀，可选，支持 HTML
+            suffix_html: 帖子文本后缀，可选，支持 HTML
+            show_thread_info: 是否显示帖子信息（转发、点赞、回复数），默认为 False
+            **config: 其他渲染配置参数
+
+        Returns:
+            生成的图像的字节数据
+        """
+        render_config = self.config.model_copy(
+            update={
+                "width": width,
+                **config,
+            }
+        )
+
+        thread: ThreadDTO | Thread | ThreadContent
+        if isinstance(thread_or_param, RenderThreadDetailParam):
+            param = thread_or_param
+            thread = param.thread
+        else:
+            thread = thread_or_param
+            param = RenderThreadDetailParam.from_dto(thread, posts or [])
+
+        if prefix_html:
+            param.prefix_html = prefix_html
+        if suffix_html:
+            param.suffix_html = suffix_html
+
+        if isinstance(thread, Thread):
+            thread = convert_aiotieba_thread(thread)
+
+        if show_thread_info and isinstance(thread, ThreadDTO):
+            info_html = await self._render_html(
+                "thread_info.html",
+                {
+                    "share_num": thread.share_num,
+                    "agree_num": thread.agree_num,
+                    "reply_num": thread.reply_num,
+                },
+            )
+            param.thread.sub_html_list.append(info_html)
+
+        if ignore_first_floor:
+            param.posts = [p for p in param.posts if p.floor != 1]
+
+        if show_link:
+            param.thread.sub_text_list.append(f"tid={param.thread.tid}")
+
+            for post in param.posts:
+                post.sub_text_list.append(f"pid={post.pid}")
+
+        async with self.context() as ctx:
+            await self._fill_content_urls(ctx, param.thread, max_image_count)
+            for post_content in param.posts:
+                await self._fill_content_urls(ctx, post_content, max_image_count)
+            await self._fill_forum_icon_url(ctx, param)
+
+            data = {
+                **param.model_dump(),
+                "style_list": [FONT_STYLE],
+            }
+
+            image_bytes = await self._render_image("thread_detail.html", config=render_config, data=data)
             return image_bytes
