@@ -28,6 +28,10 @@ dynamic = ["version"]
 orm = [
     "sqlalchemy>=2.0.44",
 ]
+renderer = [
+    "jinja2>=3.1.5",
+    "playwright>=1.49.1",
+]
 
 [dependency-groups]
 dev = [

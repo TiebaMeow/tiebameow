@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..schemas.fragments import Fragment, TypeFragText
+from ..schemas.fragments import FragImageModel, Fragment, TypeFragText
 
 
 class BaseForumDTO(BaseModel):
@@ -162,6 +162,11 @@ class ThreadDTO(BaseModel):
         text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
         return text
 
+    @cached_property
+    def images(self) -> list[FragImageModel]:
+        images = [frag for frag in self.contents if isinstance(frag, FragImageModel)]
+        return images
+
 
 class PostDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -192,6 +197,11 @@ class PostDTO(BaseModel):
     def text(self) -> str:
         text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
         return text
+
+    @cached_property
+    def images(self) -> list[FragImageModel]:
+        images = [frag for frag in self.contents if isinstance(frag, FragImageModel)]
+        return images
 
 
 class CommentDTO(BaseModel):
