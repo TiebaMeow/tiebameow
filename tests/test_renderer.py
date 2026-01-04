@@ -3,9 +3,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from tiebameow.models.dto import PostDTO, PostUserDTO, ThreadDTO, ThreadUserDTO
-from tiebameow.renderer.context import Base64Context
-from tiebameow.renderer.core.playwright import PlaywrightCore
-from tiebameow.renderer.renderer import Renderer
+from tiebameow.renderer import Renderer
+from tiebameow.renderer.playwright import PlaywrightCore
 
 # --- Test PlaywrightCore ---
 
@@ -48,34 +47,20 @@ async def test_playwright_core_close():
 
 
 @pytest.fixture
-def mock_core():
-    core = MagicMock(spec=PlaywrightCore)
-    core.render = AsyncMock(return_value=b"image_bytes")
-    core.close = AsyncMock()
-    return core
+def mock_playwright_core_cls():
+    with patch("tiebameow.renderer.renderer.PlaywrightCore") as mock:
+        yield mock
 
 
 @pytest.fixture
-def mock_context():
-    # Create the instance that will be returned by the context manager
-    context_instance = MagicMock()
-    context_instance.get_portrait_url = AsyncMock(return_value="http://fake.url/portrait")
-    context_instance.get_image_url_list = AsyncMock(return_value=[])
-    context_instance.get_forum_icon_url = AsyncMock(return_value="http://fake.url/icon")
-    # __aenter__ must be an async method that returns the instance
-    context_instance.__aenter__ = AsyncMock(return_value=context_instance)
-    context_instance.__aexit__ = AsyncMock(return_value=None)
-    context_instance.close = AsyncMock()
-
-    # The context class/factory
-    context_class = MagicMock()
-    context_class.return_value = context_instance
-    return context_class
-
-
-@pytest.fixture
-def renderer(mock_core, mock_context):
-    return Renderer(core=mock_core, context=mock_context)
+def renderer(mock_playwright_core_cls):
+    with patch("tiebameow.renderer.renderer.Client") as _:
+        r = Renderer()
+        # Mock the core instance
+        r.core = AsyncMock(spec=PlaywrightCore)
+        r.core.render = AsyncMock(return_value=b"image_bytes")
+        r.core.close = AsyncMock()
+        return r
 
 
 @pytest.mark.asyncio
@@ -109,6 +94,9 @@ async def test_renderer_render_image(renderer):
 async def test_renderer_render_content(renderer):
     # Mock _render_image
     renderer._render_image = AsyncMock(return_value=b"content_image_bytes")
+    # Mock _fill_content_urls and _fill_forum_icon_url to avoid network calls
+    renderer._fill_content_urls = AsyncMock()
+    renderer._fill_forum_icon_url = AsyncMock()
 
     thread_dto = ThreadDTO.model_construct(
         tid=123,
@@ -133,6 +121,9 @@ async def test_renderer_render_content(renderer):
 async def test_renderer_render_thread_detail(renderer):
     # Mock _render_image
     renderer._render_image = AsyncMock(return_value=b"thread_detail_image_bytes")
+    # Mock _fill_content_urls and _fill_forum_icon_url
+    renderer._fill_content_urls = AsyncMock()
+    renderer._fill_forum_icon_url = AsyncMock()
 
     thread_dto = ThreadDTO.model_construct(
         tid=123,
@@ -167,47 +158,43 @@ async def test_renderer_render_thread_detail(renderer):
     renderer._render_image.assert_called_once()
 
 
-# --- Test Base64Context ---
+@pytest.mark.asyncio
+async def test_get_portrait():
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.data = b"portrait_bytes"
+    mock_client.get_image_bytes = AsyncMock(return_value=mock_response)
+
+    # Test with string
+    res = await Renderer._get_portrait(mock_client, "portrait_id")
+    assert res == b"portrait_bytes"
+    mock_client.get_image_bytes.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_base64_context_get_portrait_url():
-    with patch("tiebameow.renderer.context.get_portrait", new_callable=AsyncMock) as mock_get_portrait:
-        mock_get_portrait.return_value = b"portrait_bytes"
+async def test_get_images():
+    mock_client = MagicMock()
+    mock_response = MagicMock()
+    mock_response.data = b"img_bytes"
+    mock_client.get_image_bytes = AsyncMock(return_value=mock_response)
 
-        context = Base64Context()
-        # Mock get_client to avoid actual client creation
-        with patch.object(Base64Context, "get_client", new_callable=AsyncMock):
-            url = await context.get_portrait_url("portrait_id")
-
-            assert url.startswith("data:image/jpeg;base64,")
-            assert "cG9ydHJhaXRfYnl0ZXM=" in url  # base64 of "portrait_bytes"
+    res = await Renderer._get_images(mock_client, ["hash1", "hash2"])
+    assert res == [b"img_bytes", b"img_bytes"]
+    assert mock_client.get_image_bytes.call_count == 2
 
 
 @pytest.mark.asyncio
-async def test_base64_context_get_image_url_list():
-    with patch("tiebameow.renderer.context.get_images", new_callable=AsyncMock) as mock_get_images:
-        mock_get_images.return_value = [b"image1", b"image2"]
+async def test_get_forum_icon():
+    mock_client = MagicMock()
+    mock_forum = MagicMock()
+    mock_forum.small_avatar = "http://avatar.url"
+    mock_client.get_forum = AsyncMock(return_value=mock_forum)
 
-        context = Base64Context()
-        # Mock get_client
-        with patch.object(Base64Context, "get_client", new_callable=AsyncMock):
-            urls = await context.get_image_url_list(["hash1", "hash2"])
+    mock_response = MagicMock()
+    mock_response.data = b"icon_bytes"
+    mock_client.get_image_bytes = AsyncMock(return_value=mock_response)
 
-            assert len(urls) == 2
-            assert urls[0].startswith("data:image/jpeg;base64,")
-            assert urls[1].startswith("data:image/jpeg;base64,")
-
-
-@pytest.mark.asyncio
-async def test_base64_context_get_forum_icon_url():
-    with patch("tiebameow.renderer.context.get_forum_icon", new_callable=AsyncMock) as mock_get_forum_icon:
-        mock_get_forum_icon.return_value = b"icon_bytes"
-
-        context = Base64Context()
-        # Mock get_client
-        with patch.object(Base64Context, "get_client", new_callable=AsyncMock):
-            url = await context.get_forum_icon_url("forum_name")
-
-            assert url.startswith("data:image/jpeg;base64,")
-            assert "aWNvbl9ieXRlcw==" in url  # base64 of "icon_bytes"
+    res = await Renderer._get_forum_icon(mock_client, "forum_name")
+    assert res == b"icon_bytes"
+    mock_client.get_forum.assert_called_with("forum_name")
+    mock_client.get_image_bytes.assert_called_with("http://avatar.url")

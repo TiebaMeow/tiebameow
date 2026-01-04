@@ -1,23 +1,33 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+import asyncio
+import base64
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import jinja2
+import yarl
 from aiotieba.typing import Post, Thread
 from pydantic import BaseModel
 
-from ..models.dto import PostDTO, ThreadDTO
+from ..client import Client
+from ..models.dto import BaseUserDTO, PostDTO, ThreadDTO
 from ..parser import convert_aiotieba_thread
+from ..utils.logger import logger
 from .config import Config
-from .context import Base64Context, ContextBase
-from .core import PlaywrightCore
-from .param import BaseContent, PostContent, RenderBaseParam, RenderContentParam, RenderThreadDetailParam, ThreadContent
-from .style import FONT_STYLE
+from .param import (
+    BaseContent,
+    PostContent,
+    RenderBaseParam,
+    RenderContentParam,
+    RenderThreadDetailParam,
+    ThreadContent,
+)
+from .playwright import PlaywrightCore
+from .style import get_font_style
 
 if TYPE_CHECKING:
     from datetime import datetime
-
-    from .core.base import CoreBase
+    from pathlib import Path
 
 
 def format_date(dt: datetime) -> str:
@@ -29,32 +39,38 @@ class Renderer:
     渲染器，用于将数据渲染为图像
 
     Args:
-        core: 渲染核心实例，若为 None 则使用默认的 PlaywrightCore
-        context: 渲染上下文类，若为 None 则使用默认的 Base64Context
         config: 渲染配置，若为 None 则使用默认配置
+        client: 用于获取资源的客户端实例，若为 None 则创建新的 Client 实例
+        template_dir: 自定义模板目录，若为 None 则使用内置模板
     """
 
     def __init__(
-        self, core: CoreBase | None = None, context: type[ContextBase] | None = None, config: Config | None = None
+        self,
+        config: Config | None = None,
+        client: Client | None = None,
+        template_dir: str | Path | None = None,
     ) -> None:
-        if core is None:
-            core = PlaywrightCore()
-        self.core = core
-
-        if context is None:
-            context = Base64Context
-        self.context: type[ContextBase] = context
+        self.core = PlaywrightCore()
 
         if config is None:
             config = Config()
         self.config = config
 
-        self.env = jinja2.Environment(loader=jinja2.PackageLoader("tiebameow.renderer", "templates"), enable_async=True)
+        self.client = client or Client()
+        self._own_client = client is None
+
+        if template_dir:
+            loader = jinja2.FileSystemLoader(str(template_dir))
+        else:
+            loader = jinja2.PackageLoader("tiebameow.renderer", "templates")
+
+        self.env = jinja2.Environment(loader=loader, enable_async=True)
         self.env.filters["format_date"] = format_date
 
     async def close(self) -> None:
         await self.core.close()
-        await self.context.close()
+        if self._own_client:
+            await self.client.__aexit__(None, None, None)
 
     async def __aenter__(self) -> Renderer:
         return self
@@ -63,6 +79,105 @@ class Renderer:
         self, exc_type: type[BaseException] | None, exc_val: BaseException | None, exc_tb: Any | None
     ) -> None:
         await self.close()
+
+    @staticmethod
+    async def _get_portrait(
+        client: Client, data: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s"
+    ) -> bytes:
+        if isinstance(data, ThreadDTO):
+            portrait = data.author.portrait
+        elif isinstance(data, BaseUserDTO):
+            portrait = data.portrait
+        else:
+            portrait = data
+
+        if not portrait:
+            return b""
+
+        if size == "s":
+            path = "n"
+        elif size == "m":
+            path = ""
+        elif size == "l":
+            path = "h"
+        else:
+            raise ValueError("Size must be one of 's', 'm', or 'l'.")
+
+        img_url = yarl.URL.build(scheme="http", host="tb.himg.baidu.com", path=f"/sys/portrait{path}/item/{portrait}")
+        try:
+            response = await client.get_image_bytes(str(img_url))
+        except Exception as e:
+            logger.error(f"Failed to get portrait image from {img_url}: {e}")
+            return b""
+
+        return cast("bytes", response.data)
+
+    @staticmethod
+    async def _get_image(client: Client, image_hash: str, size: Literal["s", "m", "l"] = "s") -> bytes:
+        if not image_hash:
+            return b""
+
+        if size == "s":
+            img_url = yarl.URL.build(
+                scheme="http", host="imgsrc.baidu.com", path=f"/forum/w=720;q=60;g=0/sign=__/{image_hash}.jpg"
+            )
+        elif size == "m":
+            img_url = yarl.URL.build(
+                scheme="http", host="imgsrc.baidu.com", path=f"/forum/w=960;q=60;g=0/sign=__/{image_hash}.jpg"
+            )
+        elif size == "l":
+            img_url = yarl.URL.build(scheme="http", host="imgsrc.baidu.com", path=f"/forum/pic/item/{image_hash}.jpg")
+        else:
+            raise ValueError("Size must be one of 's', 'm', or 'l'.")
+
+        try:
+            response = await client.get_image_bytes(str(img_url))
+            return cast("bytes", response.data)
+        except Exception as e:
+            logger.error(f"Failed to get image from {img_url}: {e}")
+            return b""
+
+    @staticmethod
+    async def _get_images(
+        client: Client,
+        data: ThreadDTO | PostDTO | list[str],
+        size: Literal["s", "m", "l"] = "s",
+        max_count: int | None = None,
+    ) -> list[bytes]:
+        if isinstance(data, (ThreadDTO, PostDTO)):
+            image_hash_list = [img.hash for img in data.images]
+        else:
+            image_hash_list = data
+
+        if max_count is not None:
+            image_hash_list = image_hash_list[:max_count]
+
+        images_bytes = await asyncio.gather(*[
+            Renderer._get_image(client, image_hash, size=size) for image_hash in image_hash_list
+        ])
+
+        return images_bytes
+
+    @staticmethod
+    async def _get_forum_icon(client: Client, fname: str) -> bytes:
+        if not fname:
+            return b""
+
+        try:
+            forum_info = await client.get_forum(fname)
+        except Exception as e:
+            logger.error(f"Failed to get forum info for {fname}: {e}")
+            return b""
+
+        if not forum_info or not forum_info.small_avatar:
+            return b""
+
+        try:
+            response = await client.get_image_bytes(forum_info.small_avatar)
+            return cast("bytes", response.data)
+        except Exception as e:
+            logger.error(f"Failed to get forum icon image from {forum_info.small_avatar}: {e}")
+            return b""
 
     async def _render_html(self, template_name: str, data: BaseModel | dict[str, Any]) -> str:
         template = self.env.get_template(template_name)
@@ -78,24 +193,45 @@ class Renderer:
         image_bytes = await self.core.render(html, config or self.config)
         return image_bytes
 
-    async def _fill_content_urls(self, ctx: ContextBase, content: BaseContent, max_image_count: int) -> None:
+    @staticmethod
+    def _get_mime_type(data: bytes) -> str:
+        if data.startswith(b"\xff\xd8\xff"):
+            return "image/jpeg"
+        if data.startswith(b"\x89PNG\r\n\x1a\n"):
+            return "image/png"
+        if data.startswith(b"GIF8"):
+            return "image/gif"
+        if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
+            return "image/webp"
+        return "image/jpeg"
+
+    def _bytes2base64_url(self, data: bytes) -> str:
+        if not data:
+            return ""
+
+        mime_type = self._get_mime_type(data)
+        return f"data:{mime_type};base64,{base64.b64encode(data).decode('utf-8')}"
+
+    async def _fill_content_urls(self, content: BaseContent, max_image_count: int) -> None:
         if not content.portrait_url:
             if content.portrait:
-                content.portrait_url = await ctx.get_portrait_url(content.portrait, size="m")
+                portrait_bytes = await self._get_portrait(self.client, content.portrait, size="m")
+                content.portrait_url = self._bytes2base64_url(portrait_bytes)
             else:
                 content.portrait_url = ""
 
         if not content.image_url_list and content.image_hash_list:
-            content.image_url_list = await ctx.get_image_url_list(
-                content.image_hash_list, size="s", max_count=max_image_count
+            images_bytes = await self._get_images(
+                self.client, content.image_hash_list, size="s", max_count=max_image_count
             )
+            content.image_url_list = [self._bytes2base64_url(img_bytes) for img_bytes in images_bytes]
 
         content.remain_image_count = max(0, len(content.image_hash_list) - len(content.image_url_list))
 
-    async def _fill_forum_icon_url(self, ctx: ContextBase, param: RenderBaseParam) -> None:
+    async def _fill_forum_icon_url(self, param: RenderBaseParam) -> None:
         if param.need_fill_url:
-            icon_url = await ctx.get_forum_icon_url(param.forum)
-            param.forum_icon_url = icon_url
+            icon_bytes = await self._get_forum_icon(self.client, param.forum)
+            param.forum_icon_url = self._bytes2base64_url(icon_bytes)
 
     async def render_content(
         self,
@@ -137,17 +273,18 @@ class Renderer:
         if suffix_html:
             param.suffix_html = suffix_html
 
-        async with self.context() as ctx:
-            await self._fill_content_urls(ctx, param.content, max_image_count)
-            await self._fill_forum_icon_url(ctx, param)
+        await asyncio.gather(
+            self._fill_content_urls(param.content, max_image_count),
+            self._fill_forum_icon_url(param),
+        )
 
-            data = {
-                **param.model_dump(),
-                "style_list": [FONT_STYLE],
-            }
+        data = {
+            **param.model_dump(),
+            "style_list": [get_font_style()],
+        }
 
-            image_bytes = await self._render_image("thread.html", config=render_config, data=data)
-            return image_bytes
+        image_bytes = await self._render_image("thread.html", config=render_config, data=data)
+        return image_bytes
 
     async def render_thread_detail(
         self,
@@ -215,16 +352,17 @@ class Renderer:
             for post in param.posts:
                 post.sub_text_list.append(f"pid={post.pid}")
 
-        async with self.context() as ctx:
-            await self._fill_content_urls(ctx, param.thread, max_image_count)
-            for post_content in param.posts:
-                await self._fill_content_urls(ctx, post_content, max_image_count)
-            await self._fill_forum_icon_url(ctx, param)
+        tasks = [
+            self._fill_content_urls(param.thread, max_image_count),
+            self._fill_forum_icon_url(param),
+        ]
+        tasks.extend(self._fill_content_urls(post, max_image_count) for post in param.posts)
+        await asyncio.gather(*tasks)
 
-            data = {
-                **param.model_dump(),
-                "style_list": [FONT_STYLE],
-            }
+        data = {
+            **param.model_dump(),
+            "style_list": [get_font_style()],
+        }
 
-            image_bytes = await self._render_image("thread_detail.html", config=render_config, data=data)
-            return image_bytes
+        image_bytes = await self._render_image("thread_detail.html", config=render_config, data=data)
+        return image_bytes
