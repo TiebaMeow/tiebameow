@@ -4,7 +4,6 @@ import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from tiebameow.client import Client
 from tiebameow.renderer import Renderer
 from tiebameow.renderer.param import (
     CommentContent,
@@ -19,7 +18,6 @@ OUTPUT_DIR = Path.cwd() / "dist" / "render_results"
 
 class Manager:
     _renderer: Renderer | None = None
-    _client: Client | None = None
 
     @classmethod
     async def get_renderer(cls) -> Renderer:
@@ -29,20 +27,10 @@ class Manager:
         return cls._renderer
 
     @classmethod
-    async def get_client(cls) -> Client:
-        if cls._client is None:
-            cls._client = Client()
-            await cls._client.__aenter__()
-        return cls._client
-
-    @classmethod
     async def close(cls) -> None:
         if cls._renderer is not None:
             await cls._renderer.__aexit__(None, None, None)
             cls._renderer = None
-        if cls._client is not None:
-            await cls._client.__aexit__(None, None, None)
-            cls._client = None
 
 
 register_functions: list[Callable[[], Awaitable[None]]] = []
