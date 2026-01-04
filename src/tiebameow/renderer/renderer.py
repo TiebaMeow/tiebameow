@@ -101,7 +101,6 @@ class Renderer:
         self,
         content: ThreadDTO | Thread | PostDTO | Post | RenderContentParam,
         *,
-        width: int = 500,
         max_image_count: int = 9,
         prefix_html: str | None = None,
         suffix_html: str | None = None,
@@ -124,12 +123,7 @@ class Renderer:
             生成的图像的字节数据
         """
 
-        render_config = self.config.model_copy(
-            update={
-                "width": width,
-                **config,
-            }
-        )
+        render_config = self.config.model_copy(update=config)
 
         if isinstance(content, RenderContentParam):
             param = content
@@ -160,7 +154,6 @@ class Renderer:
         thread_or_param: ThreadDTO | Thread | ThreadContent | RenderThreadDetailParam,
         posts: list[PostDTO | Post | PostContent] | None = None,
         *,
-        width: int = 500,
         max_image_count: int = 9,
         prefix_html: str | None = None,
         suffix_html: str | None = None,
@@ -185,12 +178,7 @@ class Renderer:
         Returns:
             生成的图像的字节数据
         """
-        render_config = self.config.model_copy(
-            update={
-                "width": width,
-                **config,
-            }
-        )
+        render_config = self.config.model_copy(update=config)
 
         thread: ThreadDTO | Thread | ThreadContent
         if isinstance(thread_or_param, RenderThreadDetailParam):
