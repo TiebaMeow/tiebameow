@@ -58,6 +58,7 @@ class Renderer:
 
         self.client = client or Client()
         self._own_client = client is None
+        self._client_entered = False
 
         loader: jinja2.BaseLoader
         if template_dir:
@@ -70,10 +71,17 @@ class Renderer:
 
     async def close(self) -> None:
         await self.core.close()
-        if self._own_client:
+        if self._own_client and self._client_entered:
             await self.client.__aexit__(None, None, None)
+            self._client_entered = False
+
+    async def _ensure_client(self) -> None:
+        if self._own_client and not self._client_entered:
+            await self.client.__aenter__()
+            self._client_entered = True
 
     async def __aenter__(self) -> Renderer:
+        await self._ensure_client()
         return self
 
     async def __aexit__(
@@ -258,6 +266,7 @@ class Renderer:
         Returns:
             生成的图像的字节数据
         """
+        await self._ensure_client()
 
         render_config = self.config.model_copy(update=config)
 
@@ -315,6 +324,7 @@ class Renderer:
         Returns:
             生成的图像的字节数据
         """
+        await self._ensure_client()
         render_config = self.config.model_copy(update=config)
 
         thread: ThreadDTO | Thread | ThreadContent
