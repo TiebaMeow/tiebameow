@@ -11,7 +11,7 @@ from ..parser import convert_aiotieba_thread
 from .config import Config
 from .context import Base64Context, ContextBase
 from .core import PlaywrightCore
-from .param import BaseContent, PostContent, RenderContentParam, RenderThreadDetailParam, ThreadContent
+from .param import BaseContent, PostContent, RenderBaseParam, RenderContentParam, RenderThreadDetailParam, ThreadContent
 from .style import FONT_STYLE
 
 if TYPE_CHECKING:
@@ -92,7 +92,7 @@ class Renderer:
 
         content.remain_image_count = max(0, len(content.image_hash_list) - len(content.image_url_list))
 
-    async def _fill_forum_icon_url(self, ctx: ContextBase, param: RenderThreadDetailParam) -> None:
+    async def _fill_forum_icon_url(self, ctx: ContextBase, param: RenderBaseParam) -> None:
         if param.need_fill_url:
             icon_url = await ctx.get_forum_icon_url(param.forum)
             param.forum_icon_url = icon_url
@@ -140,6 +140,7 @@ class Renderer:
 
         async with self.context() as ctx:
             await self._fill_content_urls(ctx, param.content, max_image_count)
+            await self._fill_forum_icon_url(ctx, param)
 
             data = {
                 **param.model_dump(),
