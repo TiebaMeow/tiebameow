@@ -38,10 +38,7 @@ class BaseContent(BaseModel):
 
     @property
     def need_fill_url(self) -> bool:
-        return bool(
-            (self.image_hash_list and not self.image_url_list)
-            or (self.portrait and not self.portrait_url)
-        )
+        return bool((self.image_hash_list and not self.image_url_list) or (self.portrait and not self.portrait_url))
 
     @field_validator("create_time", mode="before")
     @classmethod

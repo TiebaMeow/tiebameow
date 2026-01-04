@@ -1,8 +1,8 @@
 import os
 import sys
 import time
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable
 
 from tiebameow.client import Client
 from tiebameow.renderer import Renderer
