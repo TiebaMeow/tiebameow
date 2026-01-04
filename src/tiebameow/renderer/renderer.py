@@ -112,7 +112,6 @@ class Renderer:
 
         Args:
             content: 要渲染的内容，可以是 Thread/Post 相关对象
-            width: 渲染图像的原始宽度，默认为 500 (px)
             max_image_count: 最大包含的图片数量，默认为 9
             prefix_html: 文本前缀，可选，支持 HTML
             suffix_html: 文本后缀，可选，支持 HTML
@@ -169,7 +168,6 @@ class Renderer:
         Args:
             thread_or_param: 要渲染的帖子，或包含帖子与回复的渲染参数对象
             posts: 要渲染的回复列表
-            width: 渲染图像的原始宽度，默认为 500 (px)
             max_image_count: 每个楼层最大包含的图片数量，默认为 9
             prefix_html: 帖子文本前缀，可选，支持 HTML
             suffix_html: 帖子文本后缀，可选，支持 HTML

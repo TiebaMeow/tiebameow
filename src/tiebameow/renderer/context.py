@@ -192,8 +192,11 @@ class Base64Context(ContextBase):
     client: Client | None = None
 
     @staticmethod
-    def bytes2base64(data: bytes) -> str:
-        return base64.b64encode(data).decode("utf-8")
+    def bytes2base64_url(data: bytes) -> str:
+        if not data:
+            return ""
+
+        return f"data:image/jpeg;base64,{base64.b64encode(data).decode('utf-8')}"
 
     @classmethod
     async def get_client(cls) -> Client:
@@ -218,18 +221,18 @@ class Base64Context(ContextBase):
 
     async def get_portrait_url(self, data: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s") -> str:
         portrait_bytes = await get_portrait(await self.get_client(), data, size=size)
-        return f"data:image/jpeg;base64,{self.bytes2base64(portrait_bytes)}"
+        return self.bytes2base64_url(portrait_bytes)
 
     async def get_image_url_list(
         self, data: ThreadDTO | PostDTO | list[str], size: Literal["s", "m", "l"] = "s", max_count: int | None = None
     ) -> list[str]:
         images_bytes = await get_images(await self.get_client(), data, size=size, max_count=max_count)
-        image_urls = [f"data:image/jpeg;base64,{self.bytes2base64(img_bytes)}" for img_bytes in images_bytes]
+        image_urls = [self.bytes2base64_url(img_bytes) for img_bytes in images_bytes]
         return image_urls
 
     async def get_forum_icon_url(self, fname: str) -> str:
         icon_bytes = await get_forum_icon(await self.get_client(), fname)
-        return f"data:image/jpeg;base64,{self.bytes2base64(icon_bytes)}"
+        return self.bytes2base64_url(icon_bytes)
 
 
 class FileContext(ContextBase):
@@ -273,6 +276,15 @@ class FileContext(ContextBase):
         if self.task_dir.exists():
             shutil.rmtree(self.task_dir, ignore_errors=True)
 
+    async def make_file_url(self, data: bytes, filename: str | Path) -> str:
+        if not data:
+            return ""
+
+        file_path = self.task_dir / filename
+        with file_path.open("wb") as f:
+            f.write(data)
+        return file_path.as_uri()
+
     async def get_portrait_url(self, data: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s") -> str:
         if isinstance(data, ThreadDTO):
             portrait = data.author.portrait
@@ -281,10 +293,7 @@ class FileContext(ContextBase):
         else:
             portrait = data
         portrait_bytes = await get_portrait(await self.get_client(), portrait, size=size)
-        file_path = self.task_dir / f"portrait_{portrait}_{size}.jpg"
-        with file_path.open("wb") as f:
-            f.write(portrait_bytes)
-        return file_path.as_uri()
+        return await self.make_file_url(portrait_bytes, self.task_dir / f"portrait_{portrait}_{size}.jpg")
 
     async def get_image_url_list(
         self, data: ThreadDTO | PostDTO | list[str], size: Literal["s", "m", "l"] = "s", max_count: int | None = None
@@ -293,14 +302,9 @@ class FileContext(ContextBase):
         image_urls = []
         for idx, img_bytes in enumerate(images_bytes):
             file_path = self.task_dir / f"image_{uuid4().hex if isinstance(data, list) else data.pid}_{idx}_{size}.jpg"
-            with file_path.open("wb") as f:
-                f.write(img_bytes)
-            image_urls.append(file_path.as_uri())
+            image_urls.append(await self.make_file_url(img_bytes, file_path))
         return image_urls
 
     async def get_forum_icon_url(self, fname: str) -> str:
         icon_bytes = await get_forum_icon(await self.get_client(), fname)
-        file_path = self.task_dir / f"forum_icon_{fname}.jpg"
-        with file_path.open("wb") as f:
-            f.write(icon_bytes)
-        return file_path.as_uri()
+        return await self.make_file_url(icon_bytes, self.task_dir / f"forum_icon_{fname}.jpg")
