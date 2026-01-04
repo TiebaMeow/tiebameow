@@ -73,12 +73,14 @@ class PlaywrightCore(CoreBase):
                 except AttributeError as e:
                     raise ValueError(f"Invalid browser engine: {self.browser_engine}") from e
             else:
+                from playwright.async_api import Error
+
                 for engine_name in ["chromium", "firefox", "webkit"]:
                     engine = getattr(self.playwright, engine_name)
                     try:
                         self.browser = await engine.launch()
                         break
-                    except Exception:
+                    except Error:
                         continue
                 else:
                     self.browser = (

@@ -9,6 +9,14 @@ from ..models.dto import CommentDTO, PostDTO, ThreadDTO
 from ..parser import convert_aiotieba_comment, convert_aiotieba_post, convert_aiotieba_thread
 
 
+def convert_timestamp(v: int | float | datetime) -> datetime:
+    if isinstance(v, (int, float)):
+        if v > 1e11:
+            v = v / 1000
+        return datetime.fromtimestamp(v)
+    return v
+
+
 class BaseContent(BaseModel):
     text: str = ""
 
@@ -43,11 +51,7 @@ class BaseContent(BaseModel):
     @field_validator("create_time", mode="before")
     @classmethod
     def convert_timestamp(cls, v: int | float | datetime) -> datetime:
-        if isinstance(v, (int, float)):
-            if v > 1e11:
-                v = v / 1000
-            return datetime.fromtimestamp(v)
-        return v
+        return convert_timestamp(v)
 
 
 class CommentContent(BaseModel):
@@ -61,11 +65,7 @@ class CommentContent(BaseModel):
     @field_validator("create_time", mode="before")
     @classmethod
     def convert_timestamp(cls, v: int | float | datetime) -> datetime:
-        if isinstance(v, (int, float)):
-            if v > 1e11:
-                v = v / 1000
-            return datetime.fromtimestamp(v)
-        return v
+        return convert_timestamp(v)
 
     @classmethod
     def from_dto(cls, dto: CommentDTO | Comment) -> CommentContent:

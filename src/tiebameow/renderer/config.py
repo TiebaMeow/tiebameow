@@ -5,11 +5,9 @@ from pydantic import BaseModel
 
 class Config(BaseModel):
     """
-    渲染配置，width和height不应在此处设置，而应在渲染时传入。
-
     Attributes:
         width (int): 渲染宽度，默认为500。
-        height (int): 渲染高度，默认为100。
+        height (int): 渲染高度，无需手动调整高度，默认为100。
         quality (Literal["low", "medium", "high"]): 渲染质量，输出清晰度，默认为"medium"。
     """
 

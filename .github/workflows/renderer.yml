@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --extra renderer
-          uv run playwright install chromium
+          uv run playwright install --with-deps chromium
 
       - name: Run render script
         run: uv run src/tiebameow/renderer/scripts/render.py
