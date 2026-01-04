@@ -30,7 +30,7 @@ jobs:
           uv run playwright install --with-deps chromium
 
       - name: Run render script
-        run: uv run src/tiebameow/renderer/scripts/render.py
+        run: uv run scripts/render.py
 
       - name: Upload render results
         uses: actions/upload-artifact@v4

@@ -9,63 +9,44 @@ from ..models.dto import CommentDTO, PostDTO, ThreadDTO
 from ..parser import convert_aiotieba_comment, convert_aiotieba_post, convert_aiotieba_thread
 
 
-def convert_timestamp(v: int | float | datetime) -> datetime:
-    if isinstance(v, (int, float)):
-        if v > 1e11:
-            v = v / 1000
-        return datetime.fromtimestamp(v)
-    return v
-
-
-class BaseContent(BaseModel):
-    text: str = ""
-
+class TimeAwareModel(BaseModel):
     create_time: datetime | int | float
 
+    @field_validator("create_time", mode="before")
+    @classmethod
+    def convert_timestamp(cls, v: int | float | datetime) -> datetime:
+        if isinstance(v, (int, float)):
+            if v > 1e11:
+                v = v / 1000
+            return datetime.fromtimestamp(v)
+        return v
+
+
+class BaseContent(TimeAwareModel):
+    text: str = ""
     nick_name: str = ""
-
     level: int = 0
-
     portrait: str = ""
-
     portrait_url: str = ""
-
     image_hash_list: list[str] = []
-
     image_url_list: list[str] = []
-
     remain_image_count: int = 0
-
     sub_text_list: list[str] = []
-
     sub_html_list: list[str] = []
-
     tid: int = 0
-
     pid: int = 0
 
     @property
     def need_fill_url(self) -> bool:
         return bool((self.image_hash_list and not self.image_url_list) or (self.portrait and not self.portrait_url))
 
-    @field_validator("create_time", mode="before")
-    @classmethod
-    def convert_timestamp(cls, v: int | float | datetime) -> datetime:
-        return convert_timestamp(v)
 
-
-class CommentContent(BaseModel):
+class CommentContent(TimeAwareModel):
     nick_name: str = ""
     text: str = ""
-    create_time: datetime | int | float
 
     tid: int = 0
     pid: int = 0
-
-    @field_validator("create_time", mode="before")
-    @classmethod
-    def convert_timestamp(cls, v: int | float | datetime) -> datetime:
-        return convert_timestamp(v)
 
     @classmethod
     def from_dto(cls, dto: CommentDTO | Comment) -> CommentContent:
