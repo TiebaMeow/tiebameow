@@ -59,6 +59,7 @@ class Renderer:
         self.client = client or Client()
         self._own_client = client is None
 
+        loader: jinja2.BaseLoader
         if template_dir:
             loader = jinja2.FileSystemLoader(str(template_dir))
         else:
