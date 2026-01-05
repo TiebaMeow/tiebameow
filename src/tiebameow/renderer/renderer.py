@@ -7,11 +7,12 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 
 import jinja2
 import yarl
+from aiotieba.api.get_posts._classdef import Thread_p
 from aiotieba.typing import Post, Thread
 
 from ..client import Client
-from ..models.dto import BaseUserDTO, CommentDTO, PostDTO, ThreadDTO
-from ..parser import convert_aiotieba_post, convert_aiotieba_thread
+from ..models.dto import BaseUserDTO, CommentDTO, PostDTO, ThreadDTO, ThreadpDTO
+from ..parser import convert_aiotieba_post, convert_aiotieba_thread, convert_aiotieba_threadp
 from ..utils.logger import logger
 from .config import RenderConfig
 from .playwright import PlaywrightCore
@@ -211,7 +212,7 @@ class Renderer:
 
     async def _build_content_context(
         self,
-        content: ThreadDTO | PostDTO | CommentDTO,
+        content: ThreadDTO | ThreadpDTO | PostDTO | CommentDTO,
         max_image_count: int = 9,
         show_link: bool = True,
     ) -> dict[str, Any]:
@@ -240,12 +241,12 @@ class Renderer:
             "pid": content.pid,
         }
 
-        if isinstance(content, (ThreadDTO, PostDTO)):
+        if isinstance(content, (ThreadDTO, ThreadpDTO, PostDTO)):
             context["image_hash_list"] = [img.hash for img in content.images]
         else:
             context["image_hash_list"] = []
 
-        if isinstance(content, ThreadDTO):
+        if isinstance(content, (ThreadDTO, ThreadpDTO)):
             context["title"] = content.title
             if show_link:
                 context["sub_text_list"].append(f"tid: {content.tid}")
@@ -372,7 +373,7 @@ class Renderer:
 
     async def render_thread_detail(
         self,
-        thread: ThreadDTO | Thread,
+        thread: ThreadDTO | ThreadpDTO | Thread | Thread_p,
         posts: Sequence[PostDTO | Post] | None = None,
         *,
         max_image_count: int = 9,
@@ -405,6 +406,8 @@ class Renderer:
 
         if isinstance(thread, Thread):
             thread = convert_aiotieba_thread(thread)
+        elif isinstance(thread, Thread_p):
+            thread = convert_aiotieba_threadp(thread)
 
         posts_dtos: list[PostDTO] = []
         if posts:
