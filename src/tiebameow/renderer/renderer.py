@@ -79,6 +79,11 @@ class Renderer:
 
     async def __aenter__(self) -> Renderer:
         await self._ensure_client()
+        try:
+            await self.core.launch()
+        except Exception:
+            await self.close()
+            raise
         return self
 
     async def __aexit__(
