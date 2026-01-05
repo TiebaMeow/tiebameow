@@ -79,8 +79,9 @@ class PlaywrightCore:
                 self.playwright = None
 
     async def render(self, html: str, config: RenderConfig) -> bytes:
-        if self.browser is None:
-            await self.launch()
+        async with self._lock:
+            if self.browser is None:
+                await self.launch()
 
         browser = cast("Browser", self.browser)
         async with await browser.new_page(device_scale_factor=QUALITY_MAP_SCALE[config.quality]) as page:
