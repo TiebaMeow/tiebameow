@@ -259,7 +259,8 @@ class Renderer:
 
         portrait_bytes = b""
         if content.author.portrait:
-            portrait_bytes = await self._get_portrait(self.client, content.author.portrait, size="m")
+            size: Literal["s", "m", "l"] = "s" if isinstance(content, CommentDTO) else "m"
+            portrait_bytes = await self._get_portrait(self.client, content.author.portrait, size=size)
 
         images_bytes: list[bytes] = []
         if context["image_hash_list"]:

@@ -94,8 +94,8 @@ async def test_renderer_render_image(renderer):
 async def test_renderer_render_content(renderer):
     # Mock _render_image
     renderer._render_image = AsyncMock(return_value=b"content_image_bytes")
-    # Mock _prepare_content_context to avoid network calls and complex logic
-    renderer._prepare_content_context = AsyncMock(
+    # Mock _build_content_context to avoid network calls and complex logic
+    renderer._build_content_context = AsyncMock(
         return_value={
             "text": "",
             "create_time": 0,
@@ -137,8 +137,8 @@ async def test_renderer_render_content(renderer):
 async def test_renderer_render_thread_detail(renderer):
     # Mock _render_image
     renderer._render_image = AsyncMock(return_value=b"thread_detail_image_bytes")
-    # Mock _prepare_content_context
-    renderer._prepare_content_context = AsyncMock(
+    # Mock _build_content_context
+    renderer._build_content_context = AsyncMock(
         return_value={
             "text": "",
             "create_time": 0,
