@@ -80,12 +80,20 @@
     <div class="comments">
         {% for comment in item.comments %}
         <div class="comment-item">
-            <div class="comment-header">
-                <span class="comment-user">{{ comment.nick_name }}:</span>
-                <span class="comment-text">{{ comment.text }}</span>
-            </div>
-            <div class="comment-footer">
-                <span class="comment-time">{{ comment.create_time | format_date }}</span>
+            {% if comment.portrait_url %}
+            <img src="{{ comment.portrait_url }}" class="comment-avatar" alt="avatar">
+            {% else %}
+            <div class="comment-avatar-placeholder"></div>
+            {% endif %}
+            <div class="comment-content">
+                <div class="comment-header">
+                    <span class="comment-user">{{ comment.nick_name }}</span>
+                    <span class="sub">Lv.{{ comment.level }}</span>
+                    <span class="comment-text">: {{ comment.text }}</span>
+                </div>
+                <div class="comment-footer">
+                    <span class="comment-time">{{ comment.create_time | format_date }}</span>
+                </div>
             </div>
         </div>
         {% endfor %}
