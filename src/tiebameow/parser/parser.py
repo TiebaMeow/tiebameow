@@ -16,6 +16,7 @@ from ..models.dto import (
     PostUserDTO,
     ShareThreadDTO,
     ThreadDTO,
+    ThreadpDTO,
     ThreadsDTO,
     ThreadUserDTO,
     UserInfoDTO,
@@ -36,7 +37,15 @@ if TYPE_CHECKING:
         FragVideo,
     )
     from aiotieba.api.get_comments._classdef import Forum_c, Page_c, UserInfo_c
-    from aiotieba.api.get_posts._classdef import Comment_p, Forum_p, Page_p, UserInfo_p
+    from aiotieba.api.get_posts._classdef import (
+        Comment_p,
+        Forum_p,
+        Page_p,
+        ShareThread_pt,
+        Thread_p,
+        UserInfo_p,
+        UserInfo_pt,
+    )
     from aiotieba.api.get_threads._classdef import Forum_t, Page_t, ShareThread, UserInfo_t
     from aiotieba.api.tieba_uid2user_info import UserInfo_TUid
     from aiotieba.typing import Comment, Comments, Post, Posts, Thread, Threads, UserInfo
@@ -78,7 +87,10 @@ def convert_aiotieba_tiebauiduser(user: UserInfo_TUid) -> BaseUserDTO:
     )
 
 
-def convert_aiotieba_threaduser(user: UserInfo_t) -> ThreadUserDTO:
+def convert_aiotieba_threaduser(user: UserInfo_t | UserInfo_pt) -> ThreadUserDTO:
+    gender = "UNKNOWN"
+    if hasattr(user, "gender"):
+        gender = cast("UserInfo_t", user).gender.name
     return ThreadUserDTO(
         user_id=user.user_id,
         portrait=user.portrait,
@@ -86,7 +98,7 @@ def convert_aiotieba_threaduser(user: UserInfo_t) -> ThreadUserDTO:
         nick_name_new=user.nick_name,
         level=user.level,
         glevel=user.glevel,
-        gender=user.gender.name,
+        gender=gender,
         icons=user.icons,
         is_bawu=user.is_bawu,
         is_vip=user.is_vip,
@@ -197,9 +209,10 @@ def convert_aiotieba_user(
     return convert_aiotieba_tiebauiduser(cast("UserInfo_TUid", user))
 
 
-def convert_aiotieba_share_thread(share_thread: ShareThread) -> ShareThreadDTO:
+def convert_aiotieba_share_thread(share_thread: ShareThread | ShareThread_pt) -> ShareThreadDTO:
+    pid = getattr(share_thread, "pid", 0)
     return ShareThreadDTO(
-        pid=share_thread.pid,
+        pid=pid,
         tid=share_thread.tid,
         fid=share_thread.fid,
         fname=share_thread.fname,
@@ -237,6 +250,28 @@ def convert_aiotieba_thread(tb_thread: Thread) -> ThreadDTO:
         last_time=datetime.fromtimestamp(tb_thread.last_time, SHANGHAI_TZ),
         thread_type=tb_thread.type,
         tab_id=tb_thread.tab_id,
+        share_origin=convert_aiotieba_share_thread(tb_thread.share_origin),
+    )
+
+
+def convert_aiotieba_threadp(tb_thread: Thread_p) -> ThreadpDTO:
+    return ThreadpDTO(
+        pid=tb_thread.pid,
+        tid=tb_thread.tid,
+        fid=tb_thread.fid,
+        fname=tb_thread.fname,
+        author_id=tb_thread.author_id,
+        author=convert_aiotieba_threaduser(tb_thread.user),
+        title=tb_thread.title,
+        contents=convert_aiotieba_content_list(tb_thread.contents.objs),
+        is_share=tb_thread.is_share,
+        agree_num=tb_thread.agree,
+        disagree_num=tb_thread.disagree,
+        reply_num=tb_thread.reply_num,
+        view_num=tb_thread.view_num,
+        share_num=tb_thread.share_num,
+        create_time=datetime.fromtimestamp(tb_thread.create_time, SHANGHAI_TZ),
+        thread_type=tb_thread.type,
         share_origin=convert_aiotieba_share_thread(tb_thread.share_origin),
     )
 

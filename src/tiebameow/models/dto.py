@@ -124,7 +124,7 @@ class ShareThreadDTO(BaseModel):
     contents: list[Fragment] = Field(default_factory=list)
 
 
-class ThreadDTO(BaseModel):
+class BaseThreadDTO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     pid: int
@@ -133,6 +133,45 @@ class ThreadDTO(BaseModel):
     fname: str
 
     author_id: int
+
+    title: str
+    contents: list[Fragment] = Field(default_factory=list)
+
+
+class ThreadpDTO(BaseThreadDTO):
+    model_config = ConfigDict(from_attributes=True)
+
+    author: ThreadUserDTO
+
+    title: str
+    contents: list[Fragment] = Field(default_factory=list)
+
+    is_share: bool
+
+    agree_num: int
+    disagree_num: int
+    reply_num: int
+    view_num: int
+    share_num: int
+    create_time: datetime
+
+    thread_type: int
+    share_origin: ShareThreadDTO
+
+    @cached_property
+    def text(self) -> str:
+        text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
+        return text
+
+    @cached_property
+    def images(self) -> list[FragImageModel]:
+        images = [frag for frag in self.contents if isinstance(frag, FragImageModel)]
+        return images
+
+
+class ThreadDTO(BaseThreadDTO):
+    model_config = ConfigDict(from_attributes=True)
+
     author: ThreadUserDTO
 
     title: str
