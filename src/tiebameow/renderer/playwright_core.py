@@ -32,7 +32,10 @@ VALID_BROWSER_ENGINES = Literal["chromium", "firefox", "webkit"]
 class PlaywrightCore:
     def __init__(self, browser_engine: VALID_BROWSER_ENGINES | None = None) -> None:
         if not self.check_installed():
-            raise ImportError("playwright is not installed. Please install it with 'pip install playwright'.")
+            raise ImportError(
+                "playwright is not installed. Please install it with 'pip install playwright'.\n"
+                "You may also need to run 'playwright install' to install the necessary browsers."
+            )
 
         self.playwright: Playwright | None = None
         self.browser_engine = browser_engine or "chromium"
@@ -41,6 +44,7 @@ class PlaywrightCore:
 
     @staticmethod
     def check_installed() -> bool:
+        """检查playwright包是否已安装。"""
         try:
             import playwright  # noqa: F401
         except ImportError:
