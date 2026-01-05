@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import dataclasses
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, cast, overload
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 from ..models.dto import (
     BaseForumDTO,
@@ -88,7 +88,7 @@ def convert_aiotieba_tiebauiduser(user: UserInfo_TUid) -> BaseUserDTO:
 
 
 def convert_aiotieba_threaduser(user: UserInfo_t | UserInfo_pt) -> ThreadUserDTO:
-    gender = "UNKNOWN"
+    gender: Literal["UNKNOWN", "MALE", "FEMALE"] = "UNKNOWN"
     if hasattr(user, "gender"):
         gender = cast("UserInfo_t", user).gender.name
     return ThreadUserDTO(
