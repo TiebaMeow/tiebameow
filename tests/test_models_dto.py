@@ -1,12 +1,48 @@
 from datetime import datetime
+from typing import Literal
+
+from pydantic import BaseModel
 
 from tiebameow.models.dto import (
+    BaseDTO,
     BaseUserDTO,
     ShareThreadDTO,
     ThreadDTO,
     ThreadUserDTO,
 )
 from tiebameow.schemas.fragments import FragTextModel
+
+# --- Test Helpers ---
+
+
+class SimpleDTO(BaseDTO):
+    name: str
+    age: int
+    score: float
+    is_active: bool
+    tags: list[str]
+    metadata: dict[str, str]
+
+
+class NestedDTO(BaseDTO):
+    id: int
+    child: SimpleDTO
+
+
+class LiteralDTO(BaseDTO):
+    mode: Literal["A", "B", "C"]
+
+
+class PlainModel(BaseModel):
+    x: int
+    y: int
+
+
+class WrapperDTO(BaseDTO):
+    inner: PlainModel
+
+
+# --- Normal Tests ---
 
 
 def test_base_user_dto() -> None:
@@ -86,3 +122,74 @@ def test_thread_dto() -> None:
     assert len(thread.contents) == 1
     assert isinstance(thread.contents[0], FragTextModel)
     assert thread.contents[0].text == "content"
+
+
+# --- Zero-fill Tests ---
+
+
+def test_base_dto_zero_values() -> None:
+    """Test completely empty init fills with zero values."""
+    obj = SimpleDTO.from_incomplete_data({})
+    assert obj.name == ""
+    assert obj.age == 0
+    assert obj.score == 0.0
+    assert obj.is_active is False
+    assert obj.tags == []
+    assert obj.metadata == {}
+
+    # Test with None input
+    obj_none = SimpleDTO.from_incomplete_data(None)
+    assert obj_none.name == ""
+
+
+def test_base_dto_partial_values() -> None:
+    """Test partial data fills missing with zero values."""
+    obj = SimpleDTO.from_incomplete_data({"name": "Alice", "age": 30})
+    assert obj.name == "Alice"
+    assert obj.age == 30
+    assert obj.score == 0.0  # Filled
+    assert obj.tags == []  # Filled
+
+
+def test_base_dto_nested() -> None:
+    """Test recursion on nested BaseDTO fields."""
+    obj = NestedDTO.from_incomplete_data({"id": 1, "child": {"name": "Bob"}})
+    assert obj.id == 1
+    assert isinstance(obj.child, SimpleDTO)
+    assert obj.child.name == "Bob"
+    assert obj.child.age == 0  # Filled child field
+    assert obj.child.tags == []
+
+
+def test_base_dto_nested_empty() -> None:
+    """Test recursion when nested field is missing entirely."""
+    obj = NestedDTO.from_incomplete_data({"id": 1})
+    assert obj.id == 1
+    assert isinstance(obj.child, SimpleDTO)
+    # Child should be created with all zero values
+    assert obj.child.name == ""
+    assert obj.child.age == 0
+
+
+def test_base_dto_literal() -> None:
+    """Test Literal defaults to first option."""
+    obj = LiteralDTO.from_incomplete_data({})
+    assert obj.mode == "A"
+
+
+def test_base_dto_literal_provided() -> None:
+    """Test Literal with provided value."""
+    obj = LiteralDTO.from_incomplete_data({"mode": "B"})
+    assert obj.mode == "B"
+
+
+def test_base_dto_with_plain_pydantic_model() -> None:
+    """Test nesting a plain Pydantic model (not BaseDTO) handles partial filling."""
+    # Only partial data for inner model
+    obj = WrapperDTO.from_incomplete_data({"inner": {"x": 10}})
+
+    # _get_zero_value for PlainModel should create {x:0, y:0}
+    # Then merged with {x: 10} -> {x:10, y:0}
+    assert isinstance(obj.inner, PlainModel)
+    assert obj.inner.x == 10
+    assert obj.inner.y == 0

@@ -1,24 +1,112 @@
 from __future__ import annotations
 
-from datetime import datetime  # noqa: TC003
+from datetime import datetime
 from functools import cached_property
-from typing import Literal
+from types import UnionType
+from typing import Any, Literal, Self, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..schemas.fragments import FragImageModel, Fragment, TypeFragText
 
 
-class BaseForumDTO(BaseModel):
+class BaseDTO(BaseModel):
+    """
+    基础 DTO 类。
+
+    在保证类型严格的同时，允许从不完整的数据源构造 DTO 对象。
+    缺失的字段将自动填充为该类型的零值。
+    """
+
     model_config = ConfigDict(from_attributes=True)
 
+    @classmethod
+    def from_incomplete_data(cls, data: dict[str, Any] | BaseModel | None = None) -> Self:
+        """
+        递归补全不完整的数据源缺失的字段并返回 DTO 实例。
+
+        Args:
+            data: 不完整的数据源，可以是字典或 Pydantic 模型实例。
+        Returns:
+            补全后的 DTO 实例。
+        """
+        if data is None:
+            data = {}
+        if isinstance(data, BaseModel):
+            data = data.model_dump()
+
+        input_payload = data.copy()
+
+        for field_name, field_info in cls.model_fields.items():
+            field_type = field_info.annotation
+
+            if field_name in input_payload:
+                curr_value = input_payload[field_name]
+
+                # 特殊处理：如果字段是 Pydantic 模型，但传入的是 dict，需要递归补全
+                # 防止嵌套对象内部缺字段
+                if isinstance(curr_value, dict) and isinstance(field_type, type) and issubclass(field_type, BaseModel):
+                    if issubclass(field_type, BaseDTO):
+                        input_payload[field_name] = field_type.from_incomplete_data(curr_value)
+                    # 处理没有继承 BaseDTO 的普通 Pydantic 模型
+                    else:
+                        zero_obj = cls._get_zero_value(field_type)
+                        # 用传入的 value 覆盖 zero_obj
+                        if isinstance(zero_obj, BaseModel):
+                            merged_data = zero_obj.model_dump()
+                            merged_data.update(curr_value)
+                            input_payload[field_name] = field_type.model_validate(merged_data)
+
+            else:
+                input_payload[field_name] = cls._get_zero_value(field_type)
+
+        return cls.model_validate(input_payload)
+
+    @classmethod
+    def _get_zero_value(cls, field_type: Any) -> Any:
+        """根据类型注解生成对应的零值。"""
+        origin = get_origin(field_type)
+        args = get_args(field_type)
+
+        if origin is Literal:
+            return args[0]
+        if origin is list:
+            return []
+        if origin is dict:
+            return {}
+        if origin is set:
+            return set()
+        if field_type is int:
+            return 0
+        if field_type is float:
+            return 0.0
+        if field_type is str:
+            return ""
+        if field_type is bool:
+            return False
+        if field_type is datetime:
+            return datetime.fromtimestamp(0)
+
+        if isinstance(field_type, type) and issubclass(field_type, BaseModel):
+            if issubclass(field_type, BaseDTO):
+                return field_type.from_incomplete_data({})
+            else:
+                dummy_data = {name: cls._get_zero_value(f.annotation) for name, f in field_type.model_fields.items()}
+                return field_type.model_validate(dummy_data)
+
+        # 预留复杂类型的处理接口
+        if origin is UnionType and type(None) in args:
+            pass
+
+        return None
+
+
+class BaseForumDTO(BaseDTO):
     fid: int
     fname: str
 
 
-class BaseUserDTO(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class BaseUserDTO(BaseDTO):
     user_id: int
     portrait: str
     user_name: str
@@ -34,8 +122,6 @@ class BaseUserDTO(BaseModel):
 
 
 class ThreadUserDTO(BaseUserDTO):
-    model_config = ConfigDict(from_attributes=True)
-
     level: int
     glevel: int
 
@@ -51,8 +137,6 @@ class ThreadUserDTO(BaseUserDTO):
 
 
 class PostUserDTO(BaseUserDTO):
-    model_config = ConfigDict(from_attributes=True)
-
     level: int
     glevel: int
 
@@ -69,8 +153,6 @@ class PostUserDTO(BaseUserDTO):
 
 
 class CommentUserDTO(BaseUserDTO):
-    model_config = ConfigDict(from_attributes=True)
-
     level: int
 
     gender: Literal["UNKNOWN", "MALE", "FEMALE"]
@@ -85,8 +167,6 @@ class CommentUserDTO(BaseUserDTO):
 
 
 class UserInfoDTO(BaseUserDTO):
-    model_config = ConfigDict(from_attributes=True)
-
     nick_name_old: str
     tieba_uid: int
 
@@ -110,9 +190,7 @@ class UserInfoDTO(BaseUserDTO):
     priv_reply: Literal["ALL", "FANS", "FOLLOW"]
 
 
-class ShareThreadDTO(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class ShareThreadDTO(BaseDTO):
     pid: int
     tid: int
     fid: int
@@ -124,9 +202,7 @@ class ShareThreadDTO(BaseModel):
     contents: list[Fragment] = Field(default_factory=list)
 
 
-class BaseThreadDTO(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class BaseThreadDTO(BaseDTO):
     pid: int
     tid: int
     fid: int
@@ -139,8 +215,6 @@ class BaseThreadDTO(BaseModel):
 
 
 class ThreadpDTO(BaseThreadDTO):
-    model_config = ConfigDict(from_attributes=True)
-
     author: ThreadUserDTO
 
     is_share: bool
@@ -167,8 +241,6 @@ class ThreadpDTO(BaseThreadDTO):
 
 
 class ThreadDTO(BaseThreadDTO):
-    model_config = ConfigDict(from_attributes=True)
-
     author: ThreadUserDTO
 
     is_good: bool
@@ -201,9 +273,7 @@ class ThreadDTO(BaseThreadDTO):
         return images
 
 
-class PostDTO(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class PostDTO(BaseDTO):
     pid: int
     tid: int
     fid: int
@@ -237,9 +307,7 @@ class PostDTO(BaseModel):
         return images
 
 
-class CommentDTO(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class CommentDTO(BaseDTO):
     cid: int
     pid: int
     tid: int
@@ -266,9 +334,7 @@ class CommentDTO(BaseModel):
         return text
 
 
-class PageInfoDTO(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class PageInfoDTO(BaseDTO):
     page_size: int = 0
     current_page: int = 0
     total_page: int = 0
@@ -278,25 +344,19 @@ class PageInfoDTO(BaseModel):
     has_prev: bool = False
 
 
-class ThreadsDTO(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class ThreadsDTO(BaseDTO):
     objs: list[ThreadDTO] = Field(default_factory=list)
     page: PageInfoDTO
     forum: BaseForumDTO
 
 
-class PostsDTO(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class PostsDTO(BaseDTO):
     objs: list[PostDTO] = Field(default_factory=list)
     page: PageInfoDTO
     forum: BaseForumDTO
 
 
-class CommentsDTO(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
+class CommentsDTO(BaseDTO):
     objs: list[CommentDTO] = Field(default_factory=list)
     page: PageInfoDTO
     forum: BaseForumDTO
