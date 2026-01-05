@@ -3,7 +3,7 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-class Config(BaseModel):
+class RenderConfig(BaseModel):
     """
     Attributes:
         width (int): 渲染宽度，默认为500。

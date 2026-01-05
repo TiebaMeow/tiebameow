@@ -13,7 +13,7 @@ from ..client import Client
 from ..models.dto import BaseUserDTO, PostDTO, ThreadDTO
 from ..parser import convert_aiotieba_thread
 from ..utils.logger import logger
-from .config import Config
+from .config import RenderConfig
 from .param import (
     BaseContent,
     PostContent,
@@ -46,14 +46,14 @@ class Renderer:
 
     def __init__(
         self,
-        config: Config | None = None,
+        config: RenderConfig | None = None,
         client: Client | None = None,
         template_dir: str | Path | None = None,
     ) -> None:
         self.core = PlaywrightCore()
 
         if config is None:
-            config = Config()
+            config = RenderConfig()
         self.config = config
 
         self.client = client or Client()
@@ -196,7 +196,7 @@ class Renderer:
         return html
 
     async def _render_image(
-        self, template_name: str, config: Config | None = None, data: BaseModel | dict[str, Any] | None = None
+        self, template_name: str, config: RenderConfig | None = None, data: BaseModel | dict[str, Any] | None = None
     ) -> bytes:
         html = await self._render_html(template_name, data or {})
         image_bytes = await self.core.render(html, config or self.config)
