@@ -15,7 +15,7 @@ from ..models.dto import BaseUserDTO, CommentDTO, PostDTO, ThreadDTO, ThreadpDTO
 from ..parser import convert_aiotieba_post, convert_aiotieba_thread, convert_aiotieba_threadp
 from ..utils.logger import logger
 from .config import RenderConfig
-from .playwright import PlaywrightCore
+from .playwright_core import PlaywrightCore
 from .style import get_font_style
 
 if TYPE_CHECKING:
@@ -33,18 +33,18 @@ def format_date(dt: datetime | int | float) -> str:
 
 class Renderer:
     """
-    渲染器，用于将数据渲染为图像
+    渲染器，用于将贴子数据渲染为图像
 
     Args:
-        config: 渲染配置，若为 None 则使用默认配置
         client: 用于获取资源的客户端实例，若为 None 则创建新的 Client 实例
+        config: 渲染配置，若为 None 则使用默认配置
         template_dir: 自定义模板目录，若为 None 则使用内置模板
     """
 
     def __init__(
         self,
-        config: RenderConfig | None = None,
         client: Client | None = None,
+        config: RenderConfig | None = None,
         template_dir: str | Path | None = None,
     ) -> None:
         self.core = PlaywrightCore()
@@ -101,14 +101,11 @@ class Renderer:
         if not portrait:
             return b""
 
+        path = ""
         if size == "s":
             path = "n"
-        elif size == "m":
-            path = ""
         elif size == "l":
             path = "h"
-        else:
-            raise ValueError("Size must be one of 's', 'm', or 'l'.")
 
         img_url = yarl.URL.build(scheme="http", host="tb.himg.baidu.com", path=f"/sys/portrait{path}/item/{portrait}")
         try:
@@ -322,7 +319,7 @@ class Renderer:
         **config: Any,
     ) -> bytes:
         """
-        渲染内容（帖子或回复）为图像
+        渲染内容（贴子或回复）为图像
 
         Args:
             content: 要渲染的内容，可以是 Thread/Post 相关对象
@@ -385,16 +382,16 @@ class Renderer:
         **config: Any,
     ) -> bytes:
         """
-        渲染帖子详情（包含回复）为图像
+        渲染贴子详情（包含回复）为图像
 
         Args:
-            thread: 要渲染的帖子
+            thread: 要渲染的贴子
             posts: 要渲染的回复列表
             max_image_count: 每个楼层最大包含的图片数量，默认为 9
-            prefix_html: 帖子文本前缀，可选，支持 HTML
-            suffix_html: 帖子文本后缀，可选，支持 HTML
+            prefix_html: 贴子文本前缀，可选，支持 HTML
+            suffix_html: 贴子文本后缀，可选，支持 HTML
             ignore_first_floor: 是否忽略渲染第一楼（楼主），默认为 True
-            show_thread_info: 是否显示帖子信息（转发、点赞、回复数），默认为 True
+            show_thread_info: 是否显示贴子信息（转发、点赞、回复数），默认为 True
             show_link: 是否显示 tid 和 pid，默认为 True
             **config: 其他渲染配置参数
 

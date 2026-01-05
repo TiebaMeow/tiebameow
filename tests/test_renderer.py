@@ -4,7 +4,7 @@ import pytest
 
 from tiebameow.models.dto import PostDTO, PostUserDTO, ThreadDTO, ThreadUserDTO
 from tiebameow.renderer import Renderer
-from tiebameow.renderer.playwright import PlaywrightCore
+from tiebameow.renderer.playwright_core import PlaywrightCore
 
 # --- Test PlaywrightCore ---
 
