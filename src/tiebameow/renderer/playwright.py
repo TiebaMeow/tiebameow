@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 if TYPE_CHECKING:
     from playwright.async_api import Browser, Playwright
 
-    from .config import Config
+    from .config import RenderConfig
 
 
 QUALITY_MAP_SCALE = {
@@ -74,7 +74,7 @@ class PlaywrightCore:
                 await self.playwright.stop()
                 self.playwright = None
 
-    async def render(self, html: str, config: Config) -> bytes:
+    async def render(self, html: str, config: RenderConfig) -> bytes:
         if self.browser is None:
             await self.launch()
 
