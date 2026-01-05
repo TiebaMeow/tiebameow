@@ -4,14 +4,16 @@ import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-from tiebameow.renderer import Renderer
-from tiebameow.renderer.param import (
-    CommentContent,
-    PostContent,
-    RenderContentParam,
-    RenderThreadDetailParam,
-    ThreadContent,
+from tiebameow.models.dto import (
+    CommentDTO,
+    CommentUserDTO,
+    PostDTO,
+    PostUserDTO,
+    ThreadDTO,
+    ThreadUserDTO,
 )
+from tiebameow.renderer import Renderer
+from tiebameow.schemas.fragments import FragTextModel
 
 OUTPUT_DIR = Path.cwd() / "dist" / "render_results"
 
@@ -78,61 +80,81 @@ def register(filename: str) -> Callable[[Callable[[], Awaitable[bytes]]], Callab
     return wrapper
 
 
-FAKE_THREAD_CONTENT = ThreadContent(
+FAKE_THREAD_DTO = ThreadDTO.model_construct(
     tid=123456,
     pid=654321,
+    fname="贴吧吧主",
     title="测试标题",
-    nick_name="测试作者",
-    text="这是一个测试内容，用于渲染测试。",
+    author=ThreadUserDTO.model_construct(
+        nick_name_new="测试作者",
+        user_name="test_author",
+        portrait="",
+        level=6,
+        user_id=1,
+    ),
+    contents=[FragTextModel(text="这是一个测试内容，用于渲染测试。")],
     create_time=1767196800,
-    level=6,
-    portrait="",
-    image_hash_list=[],
+    agree_num=10,
+    share_num=5,
+    reply_num=20,
 )
 
-FAKE_POST_CONTENT_LIST = [
-    PostContent(
+FAKE_POST_DTO_LIST = [
+    PostDTO.model_construct(
         tid=123456,
         pid=654322,
         floor=2,
-        nick_name="路人甲",
-        text="前排围观",
+        author=PostUserDTO.model_construct(
+            nick_name_new="路人甲",
+            user_name="lurenjia",
+            portrait="",
+            level=3,
+            user_id=2,
+        ),
+        contents=[FragTextModel(text="前排围观")],
         create_time=1767196900,
-        level=3,
-        portrait="",
-        image_hash_list=[],
         comments=[],
     ),
-    PostContent(
+    PostDTO.model_construct(
         tid=123456,
         pid=654323,
         floor=3,
-        nick_name="路人乙",
-        text="不明觉厉",
+        author=PostUserDTO.model_construct(
+            nick_name_new="路人乙",
+            user_name="lurenyi",
+            portrait="",
+            level=4,
+            user_id=3,
+        ),
+        contents=[FragTextModel(text="不明觉厉")],
         create_time=1767197000,
-        level=4,
-        portrait="",
-        image_hash_list=[],
         comments=[
-            CommentContent(
-                nick_name="路人甲",
-                text="确实",
+            CommentDTO.model_construct(
+                author=CommentUserDTO.model_construct(
+                    nick_name_new="路人甲",
+                    user_name="lurenjia",
+                    user_id=2,
+                ),
+                contents=[FragTextModel(text="确实")],
                 create_time=1767197100,
                 tid=123456,
                 pid=654323,
             )
         ],
     ),
-    PostContent(
+    PostDTO.model_construct(
         tid=123456,
         pid=654324,
         floor=4,
-        nick_name="测试作者",
-        text="自己顶一下",
+        author=PostUserDTO.model_construct(
+            nick_name_new="测试作者",
+            user_name="test_author",
+            portrait="",
+            level=6,
+            user_id=1,
+        ),
+        contents=[FragTextModel(text="自己顶一下")],
         create_time=1767197200,
-        level=6,
-        portrait="",
-        image_hash_list=[],
         comments=[],
     ),
 ]
@@ -141,23 +163,15 @@ FAKE_POST_CONTENT_LIST = [
 @register("thread_content.png")
 async def render_thread_content() -> bytes:
     renderer = await Manager.get_renderer()
-    return await renderer.render_content(
-        RenderContentParam(
-            content=FAKE_THREAD_CONTENT,
-            forum="贴吧吧主",
-        )
-    )
+    return await renderer.render_content(FAKE_THREAD_DTO)
 
 
 @register("thread_detail.png")
 async def render_thread_detail() -> bytes:
     renderer = await Manager.get_renderer()
     return await renderer.render_thread_detail(
-        RenderThreadDetailParam(
-            thread=FAKE_THREAD_CONTENT,
-            posts=FAKE_POST_CONTENT_LIST,
-            forum="贴吧吧主",
-        )
+        thread=FAKE_THREAD_DTO,
+        posts=FAKE_POST_DTO_LIST,
     )
 
 
