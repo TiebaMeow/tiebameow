@@ -143,9 +143,6 @@ class ThreadpDTO(BaseThreadDTO):
 
     author: ThreadUserDTO
 
-    title: str
-    contents: list[Fragment] = Field(default_factory=list)
-
     is_share: bool
 
     agree_num: int
@@ -173,9 +170,6 @@ class ThreadDTO(BaseThreadDTO):
     model_config = ConfigDict(from_attributes=True)
 
     author: ThreadUserDTO
-
-    title: str
-    contents: list[Fragment] = Field(default_factory=list)
 
     is_good: bool
     is_top: bool
