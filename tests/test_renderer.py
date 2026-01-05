@@ -94,9 +94,25 @@ async def test_renderer_render_image(renderer):
 async def test_renderer_render_content(renderer):
     # Mock _render_image
     renderer._render_image = AsyncMock(return_value=b"content_image_bytes")
-    # Mock _fill_content_urls and _fill_forum_icon_url to avoid network calls
-    renderer._fill_content_urls = AsyncMock()
-    renderer._fill_forum_icon_url = AsyncMock()
+    # Mock _prepare_content_context to avoid network calls and complex logic
+    renderer._prepare_content_context = AsyncMock(
+        return_value={
+            "text": "",
+            "create_time": 0,
+            "nick_name": "",
+            "level": 0,
+            "portrait_url": "",
+            "image_url_list": [],
+            "remain_image_count": 0,
+            "sub_text_list": [],
+            "sub_html_list": [],
+            "tid": 0,
+            "pid": 0,
+            "image_hash_list": [],
+        }
+    )
+    # Mock _get_forum_icon
+    renderer._get_forum_icon = AsyncMock(return_value=b"")
 
     thread_dto = ThreadDTO.model_construct(
         tid=123,
@@ -121,9 +137,25 @@ async def test_renderer_render_content(renderer):
 async def test_renderer_render_thread_detail(renderer):
     # Mock _render_image
     renderer._render_image = AsyncMock(return_value=b"thread_detail_image_bytes")
-    # Mock _fill_content_urls and _fill_forum_icon_url
-    renderer._fill_content_urls = AsyncMock()
-    renderer._fill_forum_icon_url = AsyncMock()
+    # Mock _prepare_content_context
+    renderer._prepare_content_context = AsyncMock(
+        return_value={
+            "text": "",
+            "create_time": 0,
+            "nick_name": "",
+            "level": 0,
+            "portrait_url": "",
+            "image_url_list": [],
+            "remain_image_count": 0,
+            "sub_text_list": [],
+            "sub_html_list": [],
+            "tid": 0,
+            "pid": 0,
+            "image_hash_list": [],
+        }
+    )
+    # Mock _get_forum_icon
+    renderer._get_forum_icon = AsyncMock(return_value=b"")
 
     thread_dto = ThreadDTO.model_construct(
         tid=123,
