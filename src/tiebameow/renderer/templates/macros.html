@@ -88,12 +88,9 @@
             <div class="comment-content">
                 <div class="comment-header">
                     <span class="comment-user">{{ comment.nick_name }}</span>
-                    <span class="sub">Lv.{{ comment.level }}</span>
-                    <span class="comment-text">: {{ comment.text }}</span>
+                    <span class="sub">Lv.{{ comment.level }} · {{ comment.create_time | format_date }}</span>
                 </div>
-                <div class="comment-footer">
-                    <span class="comment-time">{{ comment.create_time | format_date }}</span>
-                </div>
+                <div class="comment-text">{{ comment.text }}</div>
             </div>
         </div>
         {% endfor %}
