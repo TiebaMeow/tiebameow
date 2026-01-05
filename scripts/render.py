@@ -133,6 +133,8 @@ FAKE_POST_DTO_LIST = [
                 author=CommentUserDTO.model_construct(
                     nick_name_new="路人甲",
                     user_name="lurenjia",
+                    portrait="",
+                    level=3,
                     user_id=2,
                 ),
                 contents=[FragTextModel(text="确实")],

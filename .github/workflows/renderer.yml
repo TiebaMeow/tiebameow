@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --extra renderer
-          uv run playwright install --with-deps chromium
+          uv run playwright install chromium-headless-shell
 
       - name: Run render script
         run: uv run scripts/render.py
