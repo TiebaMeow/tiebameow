@@ -54,8 +54,7 @@ def register(filename: str) -> Callable[[Callable[[], Awaitable[bytes]]], Callab
                 image_bytes = await fn()
                 OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
                 output_path = OUTPUT_DIR / filename
-                with Path(output_path).open("wb") as f:  # noqa: ASYNC230
-                    f.write(image_bytes)
+                Path(output_path).write_bytes(image_bytes)  # noqa: ASYNC240
 
                 elapsed = time.time() - start_time
                 size_kb = len(image_bytes) / 1024
