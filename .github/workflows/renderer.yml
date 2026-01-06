@@ -33,7 +33,7 @@ jobs:
         run: uv run scripts/render.py
 
       - name: Upload render results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: render-results-${{ matrix.os }}
           path: dist/render_results/
