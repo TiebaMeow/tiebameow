@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
-    from playwright.async_api import Browser, Playwright, Route
+    from playwright.async_api import Browser, BrowserContext, Playwright, Route
 
     from .config import RenderConfig
 
@@ -42,6 +42,7 @@ class PlaywrightCore:
         self.playwright: Playwright | None = None
         self.browser_engine = browser_engine or "chromium"
         self.browser: Browser | None = None
+        self.contexts: dict[str, BrowserContext] = {}
         self._lock = Lock()
 
     @staticmethod
@@ -73,12 +74,33 @@ class PlaywrightCore:
 
     async def close(self) -> None:
         async with self._lock:
+            for context in self.contexts.values():
+                await context.close()
+            self.contexts.clear()
+
             if self.browser is not None:
                 await self.browser.close()
                 self.browser = None
             if self.playwright is not None:
                 await self.playwright.stop()
                 self.playwright = None
+
+    async def _get_context(self, quality: str) -> BrowserContext:
+        if quality in self.contexts:
+            return self.contexts[quality]
+
+        async with self._lock:
+            if quality in self.contexts:
+                return self.contexts[quality]
+
+            if self.browser is None:
+                await self.launch()
+
+            browser = cast("Browser", self.browser)
+            scale = QUALITY_MAP_SCALE.get(quality, 1)
+            context = await browser.new_context(device_scale_factor=scale)
+            self.contexts[quality] = context
+            return context
 
     async def render(
         self,
@@ -87,12 +109,10 @@ class PlaywrightCore:
         element: str | None = None,
         request_handler: Callable[[Route], Awaitable[None]] | None = None,
     ) -> bytes:
-        async with self._lock:
-            if self.browser is None:
-                await self.launch()
+        context = await self._get_context(config.quality)
+        page = await context.new_page()
 
-        browser = cast("Browser", self.browser)
-        async with await browser.new_page(device_scale_factor=QUALITY_MAP_SCALE[config.quality]) as page:
+        try:
             await page.set_viewport_size({"width": config.width, "height": config.height})
 
             if request_handler:
@@ -106,3 +126,5 @@ class PlaywrightCore:
             else:
                 screenshot = await page.screenshot(full_page=True, **QUALITY_MAP_OUTPUT[config.quality])
             return screenshot
+        finally:
+            await page.close()

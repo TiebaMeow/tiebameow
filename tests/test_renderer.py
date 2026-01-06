@@ -33,6 +33,10 @@ async def test_playwright_core_lifecycle():
         mock_browser = AsyncMock()
         mock_playwright_obj.chromium.launch.return_value = mock_browser
 
+        # Mock contexts
+        mock_context = AsyncMock()
+        mock_browser.new_context.return_value = mock_context
+
         core = PlaywrightCore()
         await core.launch()
 
@@ -40,32 +44,73 @@ async def test_playwright_core_lifecycle():
         assert core.browser is not None
         mock_playwright_obj.chromium.launch.assert_called_once()
 
+        # Helper to simulate context creation
+        await core._get_context("medium")
+        assert len(core.contexts) == 1
+
         await core.close()
+        mock_context.close.assert_called_once()
         mock_browser.close.assert_called_once()
         mock_playwright_obj.stop.assert_called_once()
         assert core.browser is None
         assert core.playwright is None
+        assert len(core.contexts) == 0
 
 
 @pytest.mark.asyncio
 async def test_playwright_core_render():
-    """Test the render method of PlaywrightCore."""
+    """Test the render method of PlaywrightCore with context reuse."""
     core = PlaywrightCore()
     core.browser = AsyncMock()
+
+    # Setup mocks
+    mock_context = AsyncMock()
+    core.browser.new_context.return_value = mock_context
+
     mock_page = AsyncMock()
-    core.browser.new_page.return_value.__aenter__.return_value = mock_page
+    mock_context.new_page.return_value = mock_page
 
     config = RenderConfig(width=500, height=100, quality="medium")
     html = "<html>test</html>"
     request_handler = AsyncMock()
 
+    # First render call - should create context
     await core.render(html, config, request_handler=request_handler)
 
+    core.browser.new_context.assert_called_once()
+    mock_context.new_page.assert_called_once()
     mock_page.set_viewport_size.assert_called_with({"width": 500, "height": 100})
     mock_page.route.assert_called_with("http://tiebameow.local/**", request_handler)
     mock_page.set_content.assert_called_with(html)
     mock_page.wait_for_load_state.assert_called_with("networkidle")
     mock_page.screenshot.assert_called()
+    mock_page.close.assert_called_once()
+
+    # Second render call with same quality - should reuse context
+    await core.render(html, config, request_handler=request_handler)
+
+    # new_context should NOT be called again
+    core.browser.new_context.assert_called_once()
+    # new_page SHOULD be called again
+    assert mock_context.new_page.call_count == 2
+    assert mock_page.close.call_count == 2
+
+    # Third render call with DIFFERENT quality - should create NEW context
+    config_high = RenderConfig(width=500, height=100, quality="high")
+    mock_context_high = AsyncMock()
+    mock_page_high = AsyncMock()
+    mock_context_high.new_page.return_value = mock_page_high
+
+    # Clear contexts to cleanly test new creation without side_effect complexity on existing mock
+    core.contexts.clear()
+    core.browser.new_context.reset_mock()
+    core.browser.new_context.return_value = mock_context_high
+
+    await core.render(html, config_high, request_handler=request_handler)
+
+    core.browser.new_context.assert_called_once()
+    call_kwargs = core.browser.new_context.call_args.kwargs
+    assert call_kwargs["device_scale_factor"] == 2  # high quality scale
 
 
 # --- Test Renderer Virtual URL Generation ---
