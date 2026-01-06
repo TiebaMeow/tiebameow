@@ -176,6 +176,29 @@ async def render_thread_detail() -> bytes:
     )
 
 
+@register("text_normal.png")
+async def render_text_normal() -> bytes:
+    renderer = await Manager.get_renderer()
+    return await renderer.text_to_image(
+        "这是一段普通的测试文本，用于测试文本渲染功能。\n这是第二行文本。\n    这是缩进文本。",
+        title="普通文本渲染测试",
+        header="tiebameow renderer",
+        footer="第 1 页 / 共 5 页",
+    )
+
+
+@register("text_simple.png")
+async def render_text_simple() -> bytes:
+    renderer = await Manager.get_renderer()
+    return await renderer.text_to_image(
+        "这是一段极简样式的测试文本。\n这是第二行文本。\n    这是缩进的文本。",
+        title="极简文本测试",
+        header="页眉信息",
+        footer="页脚信息",
+        simple_mode=True,
+    )
+
+
 if __name__ == "__main__":
     import asyncio
 

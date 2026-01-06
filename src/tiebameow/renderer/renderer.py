@@ -1,9 +1,8 @@
 from __future__ import annotations
 
 import asyncio
-import base64
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, Literal
 
 import jinja2
 import yarl
@@ -11,16 +10,18 @@ from aiotieba.api.get_posts._classdef import Thread_p
 from aiotieba.typing import Post, Thread
 
 from ..client import Client
-from ..models.dto import BaseUserDTO, CommentDTO, PostDTO, ThreadDTO, ThreadpDTO
+from ..models.dto import CommentDTO, PostDTO, ThreadDTO, ThreadpDTO
 from ..parser import convert_aiotieba_post, convert_aiotieba_thread, convert_aiotieba_threadp
 from ..utils.logger import logger
 from .config import RenderConfig
 from .playwright_core import PlaywrightCore
-from .style import get_font_style
+from .style import FONT_URL, font_path, get_font_style
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from pathlib import Path
+
+    from playwright.async_api import Route
 
 
 def format_date(dt: datetime | int | float) -> str:
@@ -92,125 +93,128 @@ class Renderer:
         await self.close()
 
     @staticmethod
-    async def _get_portrait(
-        client: Client, data: str | ThreadDTO | BaseUserDTO, size: Literal["s", "m", "l"] = "s"
-    ) -> bytes:
-        """获取单个用户头像的二进制数据"""
-        if isinstance(data, ThreadDTO):
-            portrait = data.author.portrait
-        elif isinstance(data, BaseUserDTO):
-            portrait = data.portrait
-        else:
-            portrait = data
-
-        if not portrait:
-            return b""
-
-        path = ""
-        if size == "s":
-            path = "n"
-        elif size == "l":
-            path = "h"
-
-        img_url = yarl.URL.build(scheme="http", host="tb.himg.baidu.com", path=f"/sys/portrait{path}/item/{portrait}")
-        try:
-            response = await client.get_image_bytes(str(img_url))
-        except Exception as e:
-            logger.error(f"Failed to get portrait image from {img_url}: {e}")
-            return b""
-
-        return cast("bytes", response.data)
-
-    @staticmethod
-    async def _get_image(client: Client, image_hash: str, size: Literal["s", "m", "l"] = "s") -> bytes:
-        """获取单张图片的二进制数据"""
-        if not image_hash:
-            return b""
-
-        if size == "s":
-            img_url = yarl.URL.build(
-                scheme="http", host="imgsrc.baidu.com", path=f"/forum/w=720;q=60;g=0/sign=__/{image_hash}.jpg"
+    def _get_portrait_url(portrait: str, size: Literal["s", "m", "l"] = "s") -> str:
+        """获取用户头像的本地URL"""
+        return str(
+            yarl.URL.build(
+                scheme="http", host="tiebameow.local", path="/portrait", query={"id": portrait, "size": size}
             )
-        elif size == "m":
-            img_url = yarl.URL.build(
-                scheme="http", host="imgsrc.baidu.com", path=f"/forum/w=960;q=60;g=0/sign=__/{image_hash}.jpg"
+        )
+
+    @staticmethod
+    def _get_image_url(image_hash: str, size: Literal["s", "m", "l"] = "s") -> str:
+        """获取图片的本地URL"""
+        return str(
+            yarl.URL.build(
+                scheme="http", host="tiebameow.local", path="/image", query={"hash": image_hash, "size": size}
             )
-        elif size == "l":
-            img_url = yarl.URL.build(scheme="http", host="imgsrc.baidu.com", path=f"/forum/pic/item/{image_hash}.jpg")
-        else:
-            raise ValueError("Size must be one of 's', 'm', or 'l'.")
-
-        try:
-            response = await client.get_image_bytes(str(img_url))
-            return cast("bytes", response.data)
-        except Exception as e:
-            logger.error(f"Failed to get image from {img_url}: {e}")
-            return b""
+        )
 
     @staticmethod
-    async def _get_images(
-        client: Client,
-        data: ThreadDTO | PostDTO | list[str],
-        size: Literal["s", "m", "l"] = "s",
-        max_count: int | None = None,
-    ) -> list[bytes]:
-        """获取多张图片的二进制数据"""
-        if isinstance(data, (ThreadDTO, PostDTO)):
-            image_hash_list = [img.hash for img in data.images]
-        else:
-            image_hash_list = data
+    def _get_forum_icon_url(fname: str) -> str:
+        """获取吧头像的本地URL"""
+        return str(yarl.URL.build(scheme="http", host="tiebameow.local", path="/forum", query={"fname": fname}))
 
-        if max_count is not None:
-            image_hash_list = image_hash_list[:max_count]
+    async def _handle_route(self, route: Route) -> None:
+        """
+        处理 Playwright 的路由请求
 
-        images_bytes = await asyncio.gather(*[
-            Renderer._get_image(client, image_hash, size=size) for image_hash in image_hash_list
-        ])
+        拦截对 tiebameow.local 的请求，并根据请求路径提供相应的资源。
 
-        return images_bytes
+        Args:
+            route: Playwright 的路由对象
+        """
+        url = yarl.URL(route.request.url)
 
-    @staticmethod
-    async def _get_forum_icon(client: Client, fname: str) -> bytes:
-        """根据贴吧名称获取吧头像"""
-        if not fname:
-            return b""
+        if url.host != "tiebameow.local":
+            await route.continue_()
+            return
 
-        try:
-            forum_info = await client.get_forum(fname)
-        except Exception as e:
-            logger.error(f"Failed to get forum info for {fname}: {e}")
-            return b""
-
-        if not forum_info or not forum_info.small_avatar:
-            return b""
+        if str(url) == FONT_URL:
+            if font_path.exists():
+                await route.fulfill(path=font_path)
+            else:
+                await route.abort()
+            return
 
         try:
-            response = await client.get_image_bytes(forum_info.small_avatar)
-            return cast("bytes", response.data)
+            if url.path == "/portrait":
+                portrait = url.query.get("id")
+                size = url.query.get("size", "s")
+                if not portrait:
+                    await route.abort()
+                    return
+
+                path = ""
+                if size == "s":
+                    path = "n"
+                elif size == "l":
+                    path = "h"
+
+                real_url = yarl.URL.build(
+                    scheme="http", host="tb.himg.baidu.com", path=f"/sys/portrait{path}/item/{portrait}"
+                )
+                await self._proxy_request(route, str(real_url))
+
+            elif url.path == "/image":
+                image_hash = url.query.get("hash")
+                size = url.query.get("size", "s")
+
+                if not image_hash:
+                    await route.abort()
+                    return
+
+                if size == "s":
+                    real_url = yarl.URL.build(
+                        scheme="http",
+                        host="imgsrc.baidu.com",
+                        path=f"/forum/w=720;q=60;g=0/sign=__/{image_hash}.jpg",
+                    )
+                elif size == "m":
+                    real_url = yarl.URL.build(
+                        scheme="http",
+                        host="imgsrc.baidu.com",
+                        path=f"/forum/w=960;q=60;g=0/sign=__/{image_hash}.jpg",
+                    )
+                elif size == "l":
+                    real_url = yarl.URL.build(
+                        scheme="http", host="imgsrc.baidu.com", path=f"/forum/pic/item/{image_hash}.jpg"
+                    )
+                else:
+                    await route.abort()
+                    return
+
+                await self._proxy_request(route, str(real_url))
+
+            elif url.path == "/forum":
+                fname = url.query.get("fname")
+                if not fname:
+                    await route.abort()
+                    return
+
+                try:
+                    forum_info = await self.client.get_forum(fname)
+                    if forum_info and forum_info.small_avatar:
+                        await self._proxy_request(route, forum_info.small_avatar)
+                    else:
+                        await route.abort()
+                except Exception:
+                    await route.abort()
+
+            else:
+                await route.abort()
+
         except Exception as e:
-            logger.error(f"Failed to get forum icon image from {forum_info.small_avatar}: {e}")
-            return b""
+            logger.error(f"Error handling route {url}: {e}")
+            await route.abort()
 
-    @staticmethod
-    def _get_mime_type(data: bytes) -> str:
-        """根据二进制数据判断 MIME 类型"""
-        if data.startswith(b"\xff\xd8\xff"):
-            return "image/jpeg"
-        if data.startswith(b"\x89PNG\r\n\x1a\n"):
-            return "image/png"
-        if data.startswith(b"GIF8"):
-            return "image/gif"
-        if data.startswith(b"RIFF") and data[8:12] == b"WEBP":
-            return "image/webp"
-        return "image/jpeg"
-
-    def _bytes2base64_url(self, data: bytes) -> str:
-        """将二进制数据转换为 Base64 编码的 URL"""
-        if not data:
-            return ""
-
-        mime_type = self._get_mime_type(data)
-        return f"data:{mime_type};base64,{base64.b64encode(data).decode('utf-8')}"
+    async def _proxy_request(self, route: Route, url: str) -> None:
+        try:
+            response = await self.client.get_image_bytes(url)
+            await route.fulfill(body=response.data)
+        except Exception as e:
+            logger.error(f"Failed to proxy request for {url}: {e}")
+            await route.abort()
 
     async def _build_content_context(
         self,
@@ -260,23 +264,14 @@ class Renderer:
         elif isinstance(content, CommentDTO):
             pass
 
-        portrait_bytes = b""
         if content.author.portrait:
             size: Literal["s", "m", "l"] = "s" if isinstance(content, CommentDTO) else "m"
-            portrait_bytes = await self._get_portrait(self.client, content.author.portrait, size=size)
+            context["portrait_url"] = self._get_portrait_url(content.author.portrait, size=size)
 
-        images_bytes: list[bytes] = []
         if context["image_hash_list"]:
-            images_bytes = await self._get_images(
-                self.client, context["image_hash_list"], size="s", max_count=max_image_count
-            )
-
-        if portrait_bytes:
-            context["portrait_url"] = self._bytes2base64_url(portrait_bytes)
-
-        if images_bytes:
-            context["image_url_list"] = [self._bytes2base64_url(img) for img in images_bytes]
-            context["remain_image_count"] = max(0, len(context["image_hash_list"]) - len(context["image_url_list"]))
+            limit = min(max_image_count, len(context["image_hash_list"]))
+            context["image_url_list"] = [self._get_image_url(h, size="s") for h in context["image_hash_list"][:limit]]
+            context["remain_image_count"] = max(0, len(context["image_hash_list"]) - limit)
 
         return context
 
@@ -296,7 +291,11 @@ class Renderer:
         return html
 
     async def _render_image(
-        self, template_name: str, config: RenderConfig | None = None, data: dict[str, Any] | None = None
+        self,
+        template_name: str,
+        config: RenderConfig | None = None,
+        data: dict[str, Any] | None = None,
+        element: str | None = None,
     ) -> bytes:
         """
         使用指定模板渲染图像
@@ -305,12 +304,15 @@ class Renderer:
             template_name: 模板名称
             config: 渲染配置，若为 None 则使用默认配置
             data: 渲染数据字典
+            element: 要截图的元素选择器，若为 None 则截图全页
 
         Returns:
             bytes: 渲染后的图像字节数据
         """
         html = await self._render_html(template_name, data or {})
-        image_bytes = await self.core.render(html, config or self.config)
+        image_bytes = await self.core.render(
+            html, config or self.config, element=element, request_handler=self._handle_route
+        )
         return image_bytes
 
     async def render_content(
@@ -358,8 +360,7 @@ class Renderer:
 
         forum_icon_url = ""
         if content.fname:
-            icon_bytes = await self._get_forum_icon(self.client, content.fname)
-            forum_icon_url = self._bytes2base64_url(icon_bytes)
+            forum_icon_url = self._get_forum_icon_url(content.fname)
 
         data = {
             "content": content_context,
@@ -440,8 +441,7 @@ class Renderer:
 
         forum_icon_url = ""
         if thread.fname:
-            icon_bytes = await self._get_forum_icon(self.client, thread.fname)
-            forum_icon_url = self._bytes2base64_url(icon_bytes)
+            forum_icon_url = self._get_forum_icon_url(thread.fname)
 
         data = {
             "thread": thread_context,
@@ -454,4 +454,44 @@ class Renderer:
         }
 
         image_bytes = await self._render_image("thread_detail.html", config=render_config, data=data)
+        return image_bytes
+
+    async def text_to_image(
+        self,
+        text: str,
+        *,
+        title: str = "",
+        header: str = "",
+        footer: str = "",
+        simple_mode: bool = False,
+        **config: Any,
+    ) -> bytes:
+        """
+        将简单的文本渲染为图片
+
+        Args:
+            text: 要渲染的文本
+            title: 标题，可选，显示在头部下方的粗体大号字
+            header: 页眉，可选，显示在最上方的灰色小号字
+            footer: 页脚文本（如页码），可选，显示在最下方的灰色小号字
+            simple_mode: 是否使用极简紧凑样式，默认为 False
+            **config: 其他渲染配置参数
+
+        Returns:
+            生成的图像的字节数据
+        """
+        render_config = self.config.model_copy(update=config)
+
+        template_name = "text_simple.html" if simple_mode else "text.html"
+
+        data = {
+            "text": text,
+            "title": title,
+            "header": header,
+            "footer": footer,
+            "style_list": [get_font_style()],
+        }
+
+        element = ".container" if simple_mode else None
+        image_bytes = await self._render_image(template_name, config=render_config, data=data, element=element)
         return image_bytes

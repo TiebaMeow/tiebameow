@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Text Renderer</title>
+    {% if style_list %}
+    {% for style in style_list %}
+    {{ style | safe }}
+    {% endfor %}
+    {% endif %}
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #fff;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+            background-color: #fff;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .header {
+            padding: 8px 15px;
+            border-bottom: 1px solid #eee;
+            background-color: #f8f9fa;
+            font-size: 12px;
+            color: #666;
+            text-align: right;
+        }
+
+        .title-container {
+            padding: 12px 15px;
+            border-bottom: 1px solid #eee;
+            background-color: #fff;
+        }
+
+        .title {
+            margin: 0;
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+            line-height: 1.4;
+        }
+
+        .content {
+            padding: 15px;
+            font-size: 16px;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            word-break: break-all;
+            color: #333;
+            flex: 1;
+        }
+
+        .footer {
+            padding: 8px 15px;
+            border-top: 1px solid #eee;
+            background-color: #f8f9fa;
+            font-size: 12px;
+            color: #666;
+            text-align: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        {% if header %}
+        <div class="header">
+            {{ header }}
+        </div>
+        {% endif %}
+
+        {% if title %}
+        <div class="title-container">
+            <h3 class="title">{{ title }}</h3>
+        </div>
+        {% endif %}
+        
+        <div class="content">
+            {{ text }}
+        </div>
+
+        {% if footer %}
+        <div class="footer">
+            {{ footer }}
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

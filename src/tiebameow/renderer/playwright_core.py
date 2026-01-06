@@ -4,7 +4,9 @@ from asyncio import Lock
 from typing import TYPE_CHECKING, Any, Literal, cast
 
 if TYPE_CHECKING:
-    from playwright.async_api import Browser, Playwright
+    from collections.abc import Awaitable, Callable
+
+    from playwright.async_api import Browser, Playwright, Route
 
     from .config import RenderConfig
 
@@ -78,7 +80,13 @@ class PlaywrightCore:
                 await self.playwright.stop()
                 self.playwright = None
 
-    async def render(self, html: str, config: RenderConfig) -> bytes:
+    async def render(
+        self,
+        html: str,
+        config: RenderConfig,
+        element: str | None = None,
+        request_handler: Callable[[Route], Awaitable[None]] | None = None,
+    ) -> bytes:
         async with self._lock:
             if self.browser is None:
                 await self.launch()
@@ -87,7 +95,14 @@ class PlaywrightCore:
         async with await browser.new_page(device_scale_factor=QUALITY_MAP_SCALE[config.quality]) as page:
             await page.set_viewport_size({"width": config.width, "height": config.height})
 
+            if request_handler:
+                await page.route("http://tiebameow.local/**", request_handler)
+
             await page.set_content(html)
             await page.wait_for_load_state("networkidle")
-            screenshot = await page.screenshot(full_page=True, **QUALITY_MAP_OUTPUT[config.quality])
+
+            if element:
+                screenshot = await page.locator(element).screenshot(**QUALITY_MAP_OUTPUT[config.quality])
+            else:
+                screenshot = await page.screenshot(full_page=True, **QUALITY_MAP_OUTPUT[config.quality])
             return screenshot
