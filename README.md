@@ -1,5 +1,11 @@
 # tiebameow
 
+[![License](https://img.shields.io/github/license/TiebaMeow/tiebameow)](https://github.com/TiebaMeow/tiebameow/blob/main/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/tiebameow)](https://pypi.org/project/tiebameow/)
+[![Python](https://img.shields.io/pypi/pyversions/tiebameow)](https://pypi.org/project/tiebameow/)
+[![CI](https://github.com/TiebaMeow/tiebameow/actions/workflows/CI.yml/badge.svg)](https://github.com/TiebaMeow/tiebameow/actions/workflows/CI.yml)
+[![codecov](https://codecov.io/gh/TiebaMeow/tiebameow/graph/badge.svg)](https://codecov.io/gh/TiebaMeow/tiebameow)
+
 Tiebameow 项目通用模块
 
 ## 简介
