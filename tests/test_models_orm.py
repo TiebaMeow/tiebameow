@@ -30,6 +30,7 @@ def session() -> Iterator[Session]:
         yield db
     finally:
         db.close()
+        engine.dispose()
 
 
 def test_fragment_list_type(session: Session) -> None:
