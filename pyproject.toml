@@ -39,6 +39,7 @@ dev = [
     "pre-commit>=4.5.0",
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
+    "pytest-cov>=7.0.0",
     "ruff>=0.14.8",
     "uv-dynamic-versioning>=0.11.2",
 ]
@@ -63,7 +64,7 @@ strict_equality = true
 disable_error_code = ["import-untyped"]
 
 [tool.pytest.ini_options]
-addopts = "--strict-config --strict-markers"
+addopts = "--strict-config --strict-markers --cov=src/tiebameow --cov-report=term-missing"
 asyncio_mode = "strict"
 
 [build-system]
