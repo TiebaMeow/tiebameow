@@ -7,10 +7,10 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import BIGINT, JSON, DateTime, Index, Integer, String, Text
+from sqlalchemy import BIGINT, JSON, Boolean, DateTime, Enum, Index, Integer, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
@@ -418,3 +418,42 @@ class Comment(MixinBase):
             fid=dto.fid,
             author_id=dto.author_id,
         )
+
+
+class RuleBase(DeclarativeBase):
+    pass
+
+
+class RuleDBModel(RuleBase):
+    """审查规则的数据库模型。
+
+    对应数据库中的 review_rules 表。
+
+    Attributes:
+        id: 主键 ID。
+        fid: 贴吧 fid。
+        name: 规则名称。
+        enabled: 是否启用。
+        priority: 优先级。
+        trigger: 触发条件 JSON。
+        actions: 动作列表 JSON。
+        created_at: 创建时间。
+        updated_at: 更新时间。
+    """
+
+    __tablename__ = "review_rules"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    fid: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    target_type: Mapped[Literal["all", "thread", "post", "comment"]] = mapped_column(
+        Enum("all", "thread", "post", "comment", name="target_type_enum"), index=True, default="all", nullable=False
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    trigger: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    actions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
