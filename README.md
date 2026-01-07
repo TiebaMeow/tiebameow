@@ -17,9 +17,33 @@ Tiebameow 项目通用模块
 - `client`: 包含增强的 `aiotieba.Client` 与 `httpx` 客户端。
 - `models`: 定义了通用数据交换模型和 ORM 数据模型。
 - `parser`: 提供解析和处理 `aiotieba` 数据的解析器。
-- `schemas`: 定义了各种数据片段的 Pydantic 模型。
+- `renderer`: 提供将 DTO 内容或简单文本渲染为图片的功能。
+- `schemas`: 定义了各种数据片段与审查规则的 Pydantic 模型。
 - `serializer`: 提供数据交换模型的序列化和反序列化方法。
 - `utils`: 包含通用日志模块和一些辅助函数和工具类。
+
+## 安装
+
+推荐使用 `uv` 进行环境管理和依赖安装。
+
+仅安装基础功能：
+
+```bash
+uv add tiebameow
+```
+
+如需使用数据库模型，请安装 `orm` 额外依赖：
+
+```bash
+uv add tiebameow[orm]
+```
+
+如需使用渲染功能，请安装 `renderer` 额外依赖和 `Playwright` 所需浏览器：
+
+```bash
+uv add tiebameow[renderer]
+uv run playwright install chromium-headless-shell
+```
 
 ## 开发指南
 
