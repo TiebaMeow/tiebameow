@@ -33,6 +33,7 @@ ignore = ["PIE804", "G004"]
 [lint.per-file-ignores]
 "__init__.py" = ["F401"]
 "tests/**" = ["E501", "N801"]
+"rule_parser.py" = ["N806"]
 
 [format]
 quote-style = "double"
