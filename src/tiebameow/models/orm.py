@@ -7,7 +7,7 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from pydantic import TypeAdapter, ValidationError
 from sqlalchemy import BIGINT, JSON, Boolean, DateTime, Enum, Index, Integer, String, Text, func
@@ -108,7 +108,7 @@ class RuleNodeType(TypeDecorator[RuleNode]):
     def process_bind_param(self, value: RuleNode | None, dialect: Dialect) -> dict[str, Any] | None:
         if value is None:
             return None
-        return self.adapter.dump_python(value, mode="json")
+        return cast("dict[str, Any]", self.adapter.dump_python(value, mode="json"))
 
     def process_result_value(self, value: dict[str, Any] | None, dialect: Dialect) -> RuleNode | None:
         if value is None:
@@ -134,7 +134,7 @@ class ActionListType(TypeDecorator[list[Action]]):
     def process_bind_param(self, value: list[Action] | None, dialect: Dialect) -> list[dict[str, Any]] | None:
         if value is None:
             return None
-        return self.adapter.dump_python(value, mode="json")
+        return cast("list[dict[str, Any]]", self.adapter.dump_python(value, mode="json"))
 
     def process_result_value(self, value: list[dict[str, Any]] | None, dialect: Dialect) -> list[Action] | None:
         if value is None:
