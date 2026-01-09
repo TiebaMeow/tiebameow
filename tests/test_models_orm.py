@@ -106,6 +106,7 @@ def test_rule_db_model_types(session: Session) -> None:
     # Create rule
     rule = ReviewRules(
         fid=12345,
+        forum_rule_id=1,
         name="Anti-Spam",
         trigger=trigger,
         trigger_cnl="内容 包含 'spam' 且 等级 小于 3",

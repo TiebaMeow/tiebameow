@@ -7,17 +7,17 @@
 from __future__ import annotations
 
 from datetime import datetime  # noqa: TC003
-from typing import TYPE_CHECKING, Any, Literal, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from pydantic import TypeAdapter, ValidationError
-from sqlalchemy import BIGINT, JSON, Boolean, DateTime, Enum, Index, Integer, String, Text, func
+from sqlalchemy import BIGINT, JSON, Boolean, DateTime, Enum, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.mutable import MutableList
 from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, relationship
 from sqlalchemy.types import TypeDecorator, TypeEngine
 
 from ..schemas.fragments import FRAG_MAP, Fragment, FragUnknownModel
-from ..schemas.rules import Action, RuleNode
+from ..schemas.rules import Action, RuleNode, TargetType
 from ..utils.time_utils import now_with_tz
 
 if TYPE_CHECKING:
@@ -488,6 +488,8 @@ class ReviewRules(RuleBase):
     Attributes:
         id: 主键 ID。
         fid: 贴吧 fid。
+        forum_rule_id: 贴吧规则 ID。
+        target_type: 规则作用目标类型。
         name: 规则名称。
         enabled: 是否启用。
         priority: 优先级。
@@ -499,11 +501,19 @@ class ReviewRules(RuleBase):
     """
 
     __tablename__ = "review_rules"
+    __table_args__ = (
+        UniqueConstraint("fid", "forum_rule_id", name="uq_review_rules_fid_forum_rule_id"),
+        Index("idx_review_rules_fid_enabled_priority", "fid", "enabled", "priority"),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fid: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
-    target_type: Mapped[Literal["all", "thread", "post", "comment"]] = mapped_column(
-        Enum("all", "thread", "post", "comment", name="target_type_enum"), index=True, default="all", nullable=False
+    fid: Mapped[int] = mapped_column(Integer, nullable=False)
+    forum_rule_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    target_type: Mapped[TargetType] = mapped_column(
+        Enum(TargetType, name="target_type_enum"),
+        index=True,
+        default=TargetType.ALL,
+        nullable=False,
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -511,7 +521,7 @@ class ReviewRules(RuleBase):
     trigger: Mapped[RuleNode] = mapped_column(RuleNodeType, nullable=False)
     trigger_cnl: Mapped[str] = mapped_column(String, nullable=False)
     actions: Mapped[list[Action]] = mapped_column(MutableList.as_mutable(ActionListType), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_with_tz, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+        DateTime(timezone=True), index=True, default=now_with_tz, onupdate=now_with_tz, nullable=False
     )
