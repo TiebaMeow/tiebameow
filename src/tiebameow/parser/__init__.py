@@ -19,6 +19,7 @@ from .parser import (
     convert_aiotieba_user,
     convert_aiotieba_userinfo,
 )
+from .rule_parser import RuleEngineParser
 
 __all__ = [
     "convert_aiotieba_comment",
@@ -40,4 +41,5 @@ __all__ = [
     "convert_aiotieba_tiebauiduser",
     "convert_aiotieba_user",
     "convert_aiotieba_userinfo",
+    "RuleEngineParser",
 ]

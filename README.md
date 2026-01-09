@@ -16,7 +16,7 @@ Tiebameow 项目通用模块
 
 - `client`: 包含增强的 `aiotieba.Client` 与 `httpx` 客户端。
 - `models`: 定义了通用数据交换模型和 ORM 数据模型。
-- `parser`: 提供解析和处理 `aiotieba` 数据的解析器。
+- `parser`: 提供解析和处理 `aiotieba` 数据和审查规则的解析器。
 - `renderer`: 提供将 DTO 内容或简单文本渲染为图片的功能。
 - `schemas`: 定义了各种数据片段与审查规则的 Pydantic 模型。
 - `serializer`: 提供数据交换模型的序列化和反序列化方法。
@@ -64,6 +64,32 @@ async with Client() as client:
 ```python
 from tiebameow.client import HTTPXClient
 response = await HTTPXClient.get("https://example.com")
+```
+
+### Parser
+
+#### 数据转换器
+
+将 `aiotieba` 对象转换为通用数据交换模型：
+
+```python
+from tiebameow.parser import convert_aiotieba_thread
+from tiebameow.client import Client
+async with Client() as client:
+    threads = await client.get_threads("some_tieba")
+    for thread in threads:
+        converted_thread = convert_aiotieba_thread(thread)
+```
+
+#### 规则引擎解析器
+
+以 DSL 或 CNL 模式解析规则和动作：
+
+```python
+from tiebameow.parser import RuleEngineParser
+parser = RuleEngineParser()
+rule_node = parser.parse_rule("(title contains 'A' AND title contains 'B') OR NOT title contains 'C'")
+actions = parser.parse_actions("DO: delete(reason='spam content'), ban(days=1)")
 ```
 
 ### Renderer
