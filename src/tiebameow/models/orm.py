@@ -17,6 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, rela
 from sqlalchemy.types import TypeDecorator, TypeEngine
 
 from ..schemas.fragments import FRAG_MAP, Fragment, FragUnknownModel
+from ..schemas.rules import Action, RuleNode
 from ..utils.time_utils import now_with_tz
 
 if TYPE_CHECKING:
@@ -31,12 +32,15 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "Base",
     "Forum",
     "User",
     "Thread",
     "Post",
     "Comment",
     "Fragment",
+    "RuleBase",
+    "ReviewRules",
 ]
 
 
@@ -84,6 +88,58 @@ class FragmentListType(TypeDecorator[list[Fragment]]):
             if self.fallback:
                 return self.fallback()
             raise
+
+
+class RuleNodeType(TypeDecorator[RuleNode]):
+    """自动处理RuleNode模型的JSON序列化与反序列化。"""
+
+    impl = JSON
+    cache_ok = True
+
+    def __init__(self, *args: object, **kwargs: object):
+        super().__init__(*args, **kwargs)
+        self.adapter: TypeAdapter[RuleNode] = TypeAdapter(RuleNode)
+
+    def load_dialect_impl(self, dialect: Dialect) -> TypeEngine[Any]:
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(JSON())
+
+    def process_bind_param(self, value: RuleNode | None, dialect: Dialect) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        return self.adapter.dump_python(value, mode="json")
+
+    def process_result_value(self, value: dict[str, Any] | None, dialect: Dialect) -> RuleNode | None:
+        if value is None:
+            return None
+        return self.adapter.validate_python(value)
+
+
+class ActionListType(TypeDecorator[list[Action]]):
+    """自动处理Action模型列表的JSON序列化与反序列化。"""
+
+    impl = JSON
+    cache_ok = True
+
+    def __init__(self, *args: object, **kwargs: object):
+        super().__init__(*args, **kwargs)
+        self.adapter: TypeAdapter[list[Action]] = TypeAdapter(list[Action])
+
+    def load_dialect_impl(self, dialect: Dialect) -> TypeEngine[Any]:
+        if dialect.name == "postgresql":
+            return dialect.type_descriptor(JSONB())
+        return dialect.type_descriptor(JSON())
+
+    def process_bind_param(self, value: list[Action] | None, dialect: Dialect) -> list[dict[str, Any]] | None:
+        if value is None:
+            return None
+        return self.adapter.dump_python(value, mode="json")
+
+    def process_result_value(self, value: list[dict[str, Any]] | None, dialect: Dialect) -> list[Action] | None:
+        if value is None:
+            return None
+        return self.adapter.validate_python(value)
 
 
 class MixinBase(Base):
@@ -424,7 +480,7 @@ class RuleBase(DeclarativeBase):
     pass
 
 
-class RuleDBModel(RuleBase):
+class ReviewRules(RuleBase):
     """审查规则的数据库模型。
 
     对应数据库中的 review_rules 表。
@@ -436,6 +492,7 @@ class RuleDBModel(RuleBase):
         enabled: 是否启用。
         priority: 优先级。
         trigger: 触发条件 JSON。
+        trigger_cnl: 触发条件的 CNL 表达式。
         actions: 动作列表 JSON。
         created_at: 创建时间。
         updated_at: 更新时间。
@@ -451,8 +508,9 @@ class RuleDBModel(RuleBase):
     name: Mapped[str] = mapped_column(String, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    trigger: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
-    actions: Mapped[list[dict[str, Any]]] = mapped_column(JSONB, nullable=False)
+    trigger: Mapped[RuleNode] = mapped_column(RuleNodeType, nullable=False)
+    trigger_cnl: Mapped[str] = mapped_column(String, nullable=False)
+    actions: Mapped[list[Action]] = mapped_column(MutableList.as_mutable(ActionListType), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
