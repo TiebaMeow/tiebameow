@@ -45,6 +45,35 @@ uv add tiebameow[renderer]
 uv run playwright install chromium-headless-shell
 ```
 
+## 基本用法
+
+更多用法请参阅源码。
+
+### Client
+
+#### Tieba Client
+
+```python
+from tiebameow.client import Client
+async with Client() as client:
+    user_info = await client.get_user_info("some_username")
+```
+
+#### HTTP Client
+
+```python
+from tiebameow.client import HTTPXClient
+response = await HTTPXClient.get("https://example.com")
+```
+
+### Renderer
+
+```python
+from tiebameow.renderer import Renderer
+async with Renderer() as renderer:
+    image_bytes = await renderer.text_to_image("Hello, World!")
+```
+
 ## 开发指南
 
 欢迎贡献代码，请确保遵循项目的编码规范，并在提交前运行 pre-commit hooks:
