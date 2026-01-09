@@ -1,13 +1,100 @@
 from __future__ import annotations
 
-from typing import Any, Literal
+from enum import StrEnum, unique
+from typing import Any, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
-type OpType = Literal["contains", "regex", "eq", "gt", "lt", "gte", "lte", "in"]
-type LogicType = Literal["AND", "OR", "NOT", "XOR", "XNOR", "NAND", "NOR"]
-type ActionType = Literal["delete", "ban", "notify"]
-type TargetType = Literal["all", "thread", "post", "comment"]
+
+@unique
+class FieldType(StrEnum):
+    """
+    支持的字段类型枚举。
+
+    定义了规则引擎中可用于条件判断的所有字段，包括主题帖(Thread)、回复(Post)、
+    用户信息以及各类型的通用属性。
+    """
+
+    TITLE = "title"  # 仅Thread
+    IS_GOOD = "is_good"  # 仅Thread
+    IS_TOP = "is_top"  # 仅Thread
+    IS_SHARE = "is_share"  # 仅Thread
+    IS_HIDE = "is_hide"  # 仅Thread
+    TEXT = "text"
+    LEVEL = "author.level"
+    USER_ID = "author.user_id"
+    PORTRAIT = "author.portrait"
+    USER_NAME = "author.user_name"
+    NICK_NAME = "author.nick_name"
+    AGREE_NUM = "agree_num"
+    DISAGREE_NUM = "disagree_num"
+    REPLY_NUM = "reply_num"  # 仅Thread/Post
+    VIEW_NUM = "view_num"  # 仅Thread
+    SHARE_NUM = "share_num"  # 仅Thread
+    CREATE_TIME = "create_time"
+    LAST_TIME = "last_time"  # 仅Thread
+    SHARE_FNAME = "share_origin.fname"  # 仅Thread
+    SHARE_FID = "share_origin.fid"  # 仅Thread
+    SHARE_TITLE = "share_origin.title"  # 仅Thread
+    SHARE_TEXT = "share_origin.text"  # 仅Thread
+
+
+@unique
+class OperatorType(StrEnum):
+    """
+    支持的操作符类型枚举。
+
+    定义了字段值与目标值进行比较的具体逻辑。
+    """
+
+    CONTAINS = "contains"
+    REGEX = "regex"
+    EQ = "eq"
+    GT = "gt"
+    LT = "lt"
+    GTE = "gte"
+    LTE = "lte"
+    IN = "in"
+
+
+@unique
+class LogicType(StrEnum):
+    """
+    支持的逻辑运算符枚举。
+
+    用于连接多个条件节点，构成复杂的逻辑表达式。
+    """
+
+    AND = "AND"
+    OR = "OR"
+    NOT = "NOT"
+
+
+@unique
+class ActionType(StrEnum):
+    """
+    支持的动作类型枚举。
+
+    定义了规则匹配成功后只需执行的具体操作。
+    """
+
+    DELETE = "delete"
+    BAN = "ban"
+    NOTIFY = "notify"
+
+
+@unique
+class TargetType(StrEnum):
+    """
+    支持的规则目标类型枚举。
+
+    定义了规则适用的内容类型范围。
+    """
+
+    ALL = "all"
+    THREAD = "thread"
+    POST = "post"
+    COMMENT = "comment"
 
 
 class Condition(BaseModel):
@@ -21,8 +108,8 @@ class Condition(BaseModel):
         value: 匹配的目标值，类型取决于操作符。
     """
 
-    field: str
-    operator: OpType
+    field: FieldType
+    operator: OperatorType
     value: Any
 
 
@@ -76,9 +163,55 @@ class ReviewRule(BaseModel):
 
     id: int
     fid: int
-    target_type: TargetType = "all"
+    target_type: TargetType
     name: str
     enabled: bool
     priority: int
     trigger: RuleNode
     actions: list[Action]
+
+    @model_validator(mode="after")
+    def validate_trigger_match_target(self) -> Self:
+        """验证 trigger 中的字段是否匹配 target_type。"""
+
+        thread_only_fields = {
+            FieldType.TITLE,
+            FieldType.IS_GOOD,
+            FieldType.IS_TOP,
+            FieldType.IS_SHARE,
+            FieldType.IS_HIDE,
+            FieldType.VIEW_NUM,
+            FieldType.SHARE_NUM,
+            FieldType.LAST_TIME,
+            FieldType.SHARE_FNAME,
+            FieldType.SHARE_FID,
+            FieldType.SHARE_TITLE,
+            FieldType.SHARE_TEXT,
+        }
+
+        thread_post_fields = {FieldType.REPLY_NUM}
+
+        target = self.target_type
+
+        forbidden_fields: set[FieldType] = set()
+
+        if target == TargetType.POST:
+            forbidden_fields = thread_only_fields
+        elif target == TargetType.COMMENT:
+            forbidden_fields = thread_only_fields | thread_post_fields
+        elif target == TargetType.ALL:
+            forbidden_fields = thread_only_fields | thread_post_fields
+
+        if not forbidden_fields:
+            return self
+
+        def validate_node(node: RuleNode) -> None:
+            if isinstance(node, Condition):
+                if node.field in forbidden_fields:
+                    raise ValueError(f"Field '{node.field}' is not valid for target_type '{target}'")
+            elif isinstance(node, RuleGroup):
+                for child in node.conditions:
+                    validate_node(child)
+
+        validate_node(self.trigger)
+        return self
