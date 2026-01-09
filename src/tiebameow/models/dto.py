@@ -190,18 +190,6 @@ class UserInfoDTO(BaseUserDTO):
     priv_reply: Literal["ALL", "FANS", "FOLLOW"]
 
 
-class ShareThreadDTO(BaseDTO):
-    pid: int
-    tid: int
-    fid: int
-    fname: str
-
-    author_id: int
-
-    title: str
-    contents: list[Fragment] = Field(default_factory=list)
-
-
 class BaseThreadDTO(BaseDTO):
     pid: int
     tid: int
@@ -212,6 +200,21 @@ class BaseThreadDTO(BaseDTO):
 
     title: str
     contents: list[Fragment] = Field(default_factory=list)
+
+    @cached_property
+    def text(self) -> str:
+        text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
+        return text
+
+    @cached_property
+    def full_text(self) -> str:
+        text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
+        return self.title + "\n" + text
+
+    @cached_property
+    def images(self) -> list[FragImageModel]:
+        images = [frag for frag in self.contents if isinstance(frag, FragImageModel)]
+        return images
 
 
 class ThreadpDTO(BaseThreadDTO):
@@ -227,17 +230,7 @@ class ThreadpDTO(BaseThreadDTO):
     create_time: datetime
 
     thread_type: int
-    share_origin: ShareThreadDTO
-
-    @cached_property
-    def text(self) -> str:
-        text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
-        return text
-
-    @cached_property
-    def images(self) -> list[FragImageModel]:
-        images = [frag for frag in self.contents if isinstance(frag, FragImageModel)]
-        return images
+    share_origin: BaseThreadDTO
 
 
 class ThreadDTO(BaseThreadDTO):
@@ -260,17 +253,7 @@ class ThreadDTO(BaseThreadDTO):
 
     thread_type: int
     tab_id: int
-    share_origin: ShareThreadDTO
-
-    @cached_property
-    def text(self) -> str:
-        text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
-        return text
-
-    @cached_property
-    def images(self) -> list[FragImageModel]:
-        images = [frag for frag in self.contents if isinstance(frag, FragImageModel)]
-        return images
+    share_origin: BaseThreadDTO
 
 
 class PostDTO(BaseDTO):

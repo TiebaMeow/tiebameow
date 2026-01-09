@@ -5,8 +5,8 @@ from pydantic import BaseModel
 
 from tiebameow.models.dto import (
     BaseDTO,
+    BaseThreadDTO,
     BaseUserDTO,
-    ShareThreadDTO,
     ThreadDTO,
     ThreadUserDTO,
 )
@@ -91,7 +91,7 @@ def test_thread_dto() -> None:
         priv_like="PUBLIC",
         priv_reply="ALL",
     )
-    share_origin = ShareThreadDTO(pid=0, tid=0, fid=0, fname="", author_id=0, title="", contents=[])
+    share_origin = BaseThreadDTO(pid=0, tid=0, fid=0, fname="", author_id=0, title="", contents=[])
     thread = ThreadDTO(
         pid=1,
         tid=1,

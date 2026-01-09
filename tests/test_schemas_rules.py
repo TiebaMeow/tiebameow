@@ -56,6 +56,7 @@ def test_review_rule_model() -> None:
     rule = ReviewRule(
         id=1,
         fid=123,
+        forum_rule_id=1,
         target_type=TargetType.ALL,
         name="test rule",
         enabled=True,
@@ -76,6 +77,7 @@ def test_review_rule_target_type() -> None:
     rule = ReviewRule(
         id=1,
         fid=123,
+        forum_rule_id=1,
         target_type=TargetType.POST,
         name="test rule",
         enabled=True,
@@ -94,6 +96,7 @@ def test_validate_trigger_compatibility() -> None:
     rule = ReviewRule(
         id=1,
         fid=123,
+        forum_rule_id=1,
         target_type=TargetType.THREAD,
         name="thread rule",
         enabled=True,
@@ -108,6 +111,7 @@ def test_validate_trigger_compatibility() -> None:
         ReviewRule(
             id=2,
             fid=123,
+            forum_rule_id=2,
             target_type=TargetType.POST,
             name="post rule",
             enabled=True,
@@ -123,6 +127,7 @@ def test_validate_trigger_compatibility() -> None:
         ReviewRule(
             id=3,
             fid=123,
+            forum_rule_id=3,
             target_type=TargetType.COMMENT,
             name="comment rule",
             enabled=True,
@@ -137,6 +142,7 @@ def test_validate_trigger_compatibility() -> None:
     ReviewRule(
         id=4,
         fid=123,
+        forum_rule_id=4,
         target_type=TargetType.COMMENT,
         name="common rule",
         enabled=True,
@@ -150,6 +156,7 @@ def test_validate_trigger_compatibility() -> None:
         ReviewRule(
             id=5,
             fid=123,
+            forum_rule_id=5,
             target_type=TargetType.ALL,
             name="all rule",
             enabled=True,
@@ -171,6 +178,7 @@ def test_validate_trigger_compatibility() -> None:
         ReviewRule(
             id=6,
             fid=123,
+            forum_rule_id=6,
             target_type=TargetType.POST,
             name="nested rule",
             enabled=True,

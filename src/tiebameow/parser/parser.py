@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 from ..models.dto import (
     BaseForumDTO,
+    BaseThreadDTO,
     BaseUserDTO,
     CommentDTO,
     CommentsDTO,
@@ -14,7 +15,6 @@ from ..models.dto import (
     PostDTO,
     PostsDTO,
     PostUserDTO,
-    ShareThreadDTO,
     ThreadDTO,
     ThreadpDTO,
     ThreadsDTO,
@@ -209,9 +209,9 @@ def convert_aiotieba_user(
     return convert_aiotieba_tiebauiduser(cast("UserInfo_TUid", user))
 
 
-def convert_aiotieba_share_thread(share_thread: ShareThread | ShareThread_pt) -> ShareThreadDTO:
+def convert_aiotieba_share_thread(share_thread: ShareThread | ShareThread_pt) -> BaseThreadDTO:
     pid = getattr(share_thread, "pid", 0)
-    return ShareThreadDTO(
+    return BaseThreadDTO(
         pid=pid,
         tid=share_thread.tid,
         fid=share_thread.fid,

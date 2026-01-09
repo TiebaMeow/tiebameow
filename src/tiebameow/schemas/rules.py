@@ -21,6 +21,7 @@ class FieldType(StrEnum):
     IS_SHARE = "is_share"  # 仅Thread
     IS_HIDE = "is_hide"  # 仅Thread
     TEXT = "text"
+    FULL_TEXT = "full_text"  # 仅Thread
     LEVEL = "author.level"
     USER_ID = "author.user_id"
     PORTRAIT = "author.portrait"
@@ -48,13 +49,17 @@ class OperatorType(StrEnum):
     """
 
     CONTAINS = "contains"
-    REGEX = "regex"
+    NOT_CONTAINS = "not_contains"
+    REGEX = "match"
+    NOT_REGEX = "not_match"
     EQ = "eq"
+    NEQ = "neq"
     GT = "gt"
     LT = "lt"
     GTE = "gte"
     LTE = "lte"
     IN = "in"
+    NOT_IN = "not_in"
 
 
 @unique
@@ -163,6 +168,7 @@ class ReviewRule(BaseModel):
 
     id: int
     fid: int
+    forum_rule_id: int
     target_type: TargetType
     name: str
     enabled: bool
@@ -180,6 +186,7 @@ class ReviewRule(BaseModel):
             FieldType.IS_TOP,
             FieldType.IS_SHARE,
             FieldType.IS_HIDE,
+            FieldType.FULL_TEXT,
             FieldType.VIEW_NUM,
             FieldType.SHARE_NUM,
             FieldType.LAST_TIME,

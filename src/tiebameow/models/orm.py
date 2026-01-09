@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, rela
 from sqlalchemy.types import TypeDecorator, TypeEngine
 
 from ..schemas.fragments import FRAG_MAP, Fragment, FragUnknownModel
-from ..schemas.rules import Action, RuleNode, TargetType
+from ..schemas.rules import Action, ReviewRule, RuleNode, TargetType
 from ..utils.time_utils import now_with_tz
 
 if TYPE_CHECKING:
@@ -494,7 +494,6 @@ class ReviewRules(RuleBase):
         enabled: 是否启用。
         priority: 优先级。
         trigger: 触发条件 JSON。
-        trigger_cnl: 触发条件的 CNL 表达式。
         actions: 动作列表 JSON。
         created_at: 创建时间。
         updated_at: 更新时间。
@@ -503,6 +502,7 @@ class ReviewRules(RuleBase):
     __tablename__ = "review_rules"
     __table_args__ = (
         UniqueConstraint("fid", "forum_rule_id", name="uq_review_rules_fid_forum_rule_id"),
+        Index("idx_review_rules_fid_forum_rule_id", "fid", "forum_rule_id"),
         Index("idx_review_rules_fid_enabled_priority", "fid", "enabled", "priority"),
     )
 
@@ -518,10 +518,52 @@ class ReviewRules(RuleBase):
     name: Mapped[str] = mapped_column(String, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    trigger: Mapped[RuleNode] = mapped_column(RuleNodeType, nullable=False)
-    trigger_cnl: Mapped[str] = mapped_column(String, nullable=False)
+    trigger: Mapped[RuleNode] = mapped_column(RuleNodeType, index=True, nullable=False)
     actions: Mapped[list[Action]] = mapped_column(MutableList.as_mutable(ActionListType), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_with_tz, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), index=True, default=now_with_tz, onupdate=now_with_tz, nullable=False
     )
+
+    @classmethod
+    def from_rule_data(cls, review_rule: ReviewRule) -> ReviewRules:
+        """
+        从ReviewRule对象创建ReviewRules模型实例。
+
+        id 字段将被忽略，由数据库自动生成。
+
+        Args:
+            review_rule: ReviewRule对象。
+
+        Returns:
+            ReviewRules: 转换后的ReviewRules模型实例。
+        """
+        return cls(
+            fid=review_rule.fid,
+            forum_rule_id=review_rule.forum_rule_id,
+            target_type=review_rule.target_type,
+            name=review_rule.name,
+            enabled=review_rule.enabled,
+            priority=review_rule.priority,
+            trigger=review_rule.trigger,
+            actions=review_rule.actions,
+        )
+
+    def to_rule_data(self) -> ReviewRule:
+        """
+        将ReviewRules模型实例转换为ReviewRule对象。
+
+        Returns:
+            ReviewRule: 转换后的ReviewRule对象。
+        """
+        return ReviewRule(
+            id=self.id,
+            fid=self.fid,
+            forum_rule_id=self.forum_rule_id,
+            target_type=self.target_type,
+            name=self.name,
+            enabled=self.enabled,
+            priority=self.priority,
+            trigger=self.trigger,
+            actions=self.actions,
+        )
