@@ -43,6 +43,12 @@ class BaseDTO(BaseModel):
             if field_name in input_payload:
                 curr_value = input_payload[field_name]
 
+                if curr_value is None:
+                    zero_val = cls._get_zero_value(field_type)
+                    if zero_val is not None:
+                        input_payload[field_name] = zero_val
+                        curr_value = zero_val
+
                 # 特殊处理：如果字段是 Pydantic 模型，但传入的是 dict，需要递归补全
                 # 防止嵌套对象内部缺字段
                 if isinstance(curr_value, dict) and isinstance(field_type, type) and issubclass(field_type, BaseModel):
@@ -65,6 +71,23 @@ class BaseDTO(BaseModel):
     @classmethod
     def _get_zero_value(cls, field_type: Any) -> Any:
         """根据类型注解生成对应的零值。"""
+        # 处理 ForwardRef 或字符串类型的注解
+        type_str = None
+        if hasattr(field_type, "__forward_arg__"):
+            type_str = field_type.__forward_arg__
+        elif isinstance(field_type, str):
+            type_str = field_type
+
+        if type_str:
+            # 简单的字符串匹配，处理常见的容器类型
+            clean_str = type_str.strip()
+            if clean_str.startswith("list[") or clean_str == "list":
+                return []
+            if clean_str.startswith("dict[") or clean_str == "dict":
+                return {}
+            if clean_str.startswith("set[") or clean_str == "set":
+                return set()
+
         origin = get_origin(field_type)
         args = get_args(field_type)
 
