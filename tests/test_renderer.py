@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import yarl
 
-from tiebameow.models.dto import ThreadDTO, ThreadUserDTO
+from tiebameow.models.dto import PostDTO, ThreadDTO, ThreadUserDTO
 from tiebameow.renderer import Renderer
 from tiebameow.renderer.config import RenderConfig
 from tiebameow.renderer.playwright_core import PlaywrightCore
@@ -303,6 +303,243 @@ async def test_handle_route_error(renderer):
     mock_route.request.url = "http://tiebameow.local/image?hash=bad"
 
     renderer.client.get_image_bytes.side_effect = Exception("Network Error")
+
+    await renderer._handle_route(mock_route)
+    mock_route.abort.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_render_content_thread(renderer):
+    thread_dto = ThreadDTO.from_incomplete_data({
+        "tid": 123,
+        "pid": 0,
+        "fname": "test_forum",
+        "title": "Test Title",
+        "author": {"user_name": "test_user", "nick_name_new": "test_nick", "portrait": "p1", "level": 1},
+    })
+
+    # Patch convert methods if needed, but here we pass DTO
+    # Need to patch _render_image to verify it's called
+    with patch.object(renderer, "_render_image", AsyncMock(return_value=b"png")) as mock_render:
+        mock_forum_info = MagicMock()
+        mock_forum_info.small_avatar = "http://avatar"
+        renderer.client.get_forum = AsyncMock(return_value=mock_forum_info)
+
+        await renderer.render_content(thread_dto, title="Override Title")
+
+        mock_render.assert_called_once()
+        args, kwargs = mock_render.call_args
+        assert kwargs["data"]["content"]["title"] == "Override Title"
+        assert kwargs["data"]["forum"] == "test_forum"
+        assert kwargs["data"]["forum_icon_url"] == "http://tiebameow.local/forum?fname=test_forum"
+
+
+@pytest.mark.asyncio
+async def test_render_content_post(renderer):
+    post_dto = PostDTO.from_incomplete_data({
+        "pid": 111,
+        "tid": 123,
+        "fname": "test_forum",
+        "fid": 1,
+        "floor": 2,
+        "author": {"user_name": "user", "nick_name_new": "nick", "portrait": "p", "level": 1},
+    })
+
+    with patch.object(renderer, "_render_image", AsyncMock(return_value=b"png")) as mock_render:
+        await renderer.render_content(post_dto)
+        mock_render.assert_called_once()
+        context = mock_render.call_args.kwargs["data"]["content"]
+        assert context["pid"] == 111
+        assert context["floor"] == 2
+
+
+@pytest.mark.asyncio
+async def test_render_thread_detail(renderer):
+    thread_dto = ThreadDTO.from_incomplete_data({
+        "tid": 123,
+        "pid": 0,
+        "fname": "bar",
+        "fid": 1,
+        "title": "Test Title",
+        "author": {"user_name": "u", "nick_name_new": "n", "portrait": "p", "level": 1},
+    })
+
+    posts = [
+        PostDTO.from_incomplete_data({
+            "pid": 1,
+            "tid": 123,
+            "fname": "bar",
+            "fid": 1,
+            "floor": 1,
+            "author": {"user_name": "u", "nick_name_new": "n", "portrait": "p", "level": 1},
+        }),
+        PostDTO.from_incomplete_data({
+            "pid": 2,
+            "tid": 123,
+            "fname": "bar",
+            "fid": 1,
+            "floor": 2,
+            "author": {"user_name": "u", "nick_name_new": "n", "portrait": "p", "level": 1},
+        }),
+    ]
+
+    with patch.object(renderer, "_render_image", AsyncMock(return_value=b"png")) as mock_render:
+        # Test ignore_first_floor=True (default)
+        await renderer.render_thread_detail(thread_dto, posts)
+
+        # Verify passed posts data
+        call_kwargs = mock_render.call_args.kwargs
+        posts_context = call_kwargs["data"]["posts"]
+        # Only floor 2 should remain
+        assert len(posts_context) == 1
+        assert posts_context[0]["pid"] == 2
+
+
+@pytest.mark.asyncio
+async def test_text_to_image(renderer):
+    with patch.object(renderer, "_render_image", AsyncMock(return_value=b"png")) as mock_render:
+        await renderer.text_to_image("Hello", title="Title", simple_mode=True)
+
+        assert mock_render.call_args[0][0] == "text_simple.html"
+        data = mock_render.call_args.kwargs["data"]
+        assert data["text"] == "Hello"
+        assert data["title"] == "Title"
+        assert mock_render.call_args.kwargs["element"] == ".container"
+
+
+@pytest.mark.asyncio
+async def test_renderer_context_manager():
+    # Test own client lifecycle
+    with patch("tiebameow.renderer.renderer.Client") as mock_client:
+        mock_client_inst = AsyncMock()
+        mock_client.return_value = mock_client_inst
+
+        r = Renderer(client=None)
+        r.core = AsyncMock()
+
+        async with r:
+            mock_client_inst.__aenter__.assert_called()
+            r.core.launch.assert_called()
+
+        mock_client_inst.__aexit__.assert_called()
+        r.core.close.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_renderer_context_manager_external_client():
+    # Test external client lifecycle - should DOES NOT call enter/exit
+    external_client = AsyncMock()
+    r = Renderer(client=external_client)
+    r.core = AsyncMock()
+
+    async with r:
+        assert not external_client.__aenter__.called
+
+    assert not external_client.__aexit__.called
+    r.core.close.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_renderer_context_manager_error():
+    external_client = AsyncMock()
+    r = Renderer(client=external_client)
+    r.core = AsyncMock()
+    r.core.launch.side_effect = Exception("Launch failed")
+
+    with pytest.raises(Exception, match="Launch failed"):
+        async with r:
+            pass
+
+    r.core.close.assert_called()
+
+
+def test_format_date():
+    from datetime import datetime
+
+    from tiebameow.renderer.renderer import format_date
+
+    # Test float timestamp
+    ts = 1700000000.0
+    s = format_date(ts)
+    assert s == datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M")
+
+    # Test milliseconds
+    ts_ms = 1700000000000
+    s = format_date(ts_ms)
+    assert s == datetime.fromtimestamp(ts_ms / 1000).strftime("%Y-%m-%d %H:%M")
+
+
+@pytest.mark.asyncio
+async def test_renderer_custom_template_dir(tmp_path):
+    r = Renderer(template_dir=tmp_path)
+    # Check loader type
+    assert r.env.loader.__class__.__name__ == "FileSystemLoader"
+
+
+@pytest.mark.asyncio
+async def test_handle_route_portrait_large(renderer):
+    mock_route = AsyncMock()
+    mock_route.request.url = "http://tiebameow.local/portrait?id=pid&size=l"
+    mock_resp = AsyncMock(data=b"data")
+    renderer.client.get_image_bytes = AsyncMock(return_value=mock_resp)
+
+    await renderer._handle_route(mock_route)
+
+    args, _ = renderer.client.get_image_bytes.call_args
+    assert "/sys/portraith/item/pid" in str(args[0])
+
+
+@pytest.mark.asyncio
+async def test_handle_route_image_sizes(renderer):
+    # Test M size
+    mock_route = AsyncMock()
+    mock_route.request.url = "http://tiebameow.local/image?hash=h&size=m"
+    renderer.client.get_image_bytes = AsyncMock(return_value=AsyncMock(data=b"d"))
+    await renderer._handle_route(mock_route)
+    assert "w=960" in str(renderer.client.get_image_bytes.call_args[0][0])
+
+    # Test L size
+    mock_route.request.url = "http://tiebameow.local/image?hash=h&size=l"
+    await renderer._handle_route(mock_route)
+    assert "/forum/pic/item/h.jpg" in str(renderer.client.get_image_bytes.call_args[0][0])
+
+    # Test unknown size -> abort
+    mock_route.request.url = "http://tiebameow.local/image?hash=h&size=xxx"
+    mock_route.abort.reset_mock()
+    await renderer._handle_route(mock_route)
+    mock_route.abort.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_route_missing_params(renderer):
+    mock_route = AsyncMock()
+
+    # Missing portrait id
+    mock_route.request.url = "http://tiebameow.local/portrait"
+    await renderer._handle_route(mock_route)
+    mock_route.abort.assert_called()
+
+    # Missing image hash
+    mock_route.request.url = "http://tiebameow.local/image"
+    mock_route.abort.reset_mock()
+    await renderer._handle_route(mock_route)
+    mock_route.abort.assert_called()
+
+    # Missing forum fname
+    mock_route.request.url = "http://tiebameow.local/forum"
+    mock_route.abort.reset_mock()
+    await renderer._handle_route(mock_route)
+    mock_route.abort.assert_called()
+
+
+@pytest.mark.asyncio
+async def test_handle_route_forum_no_avatar(renderer):
+    mock_route = AsyncMock()
+    mock_route.request.url = "http://tiebameow.local/forum?fname=test"
+
+    mock_info = MagicMock()
+    mock_info.small_avatar = ""
+    renderer.client.get_forum = AsyncMock(return_value=mock_info)
 
     await renderer._handle_route(mock_route)
     mock_route.abort.assert_called()

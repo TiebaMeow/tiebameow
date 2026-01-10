@@ -65,7 +65,7 @@ async def test_client_context_manager() -> None:
 async def test_with_limits_enters_limiter_and_semaphore() -> None:
     limiter = _AsyncCM()
     semaphore = _AsyncCM()
-    async with Client(limiter=limiter, semaphore=semaphore) as client:
+    async with Client(limiter=limiter, semaphore=semaphore) as client:  # type: ignore[arg-type]
         async with client._with_limits():
             pass
 

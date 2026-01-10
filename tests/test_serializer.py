@@ -1,6 +1,9 @@
+import pytest
+
 from tiebameow.models.dto import CommentDTO, PostDTO, ThreadDTO
 from tiebameow.schemas.fragments import FragTextModel
 from tiebameow.serializer.serializer import (
+    deserialize,
     deserialize_comment,
     deserialize_post,
     deserialize_thread,
@@ -216,3 +219,133 @@ def test_deserialize_comment() -> None:
     comment = deserialize_comment(data)
     assert isinstance(comment, CommentDTO)
     assert comment.cid == 1
+
+
+def test_deserialize_generic_dispatch():
+    thread_data = {
+        "pid": 1,
+        "tid": 1,
+        "fid": 1,
+        "fname": "f",
+        "author_id": 1,
+        "author": {
+            "user_id": 1,
+            "portrait": "p",
+            "user_name": "u",
+            "nick_name_new": "n",
+            "level": 1,
+            "glevel": 1,
+            "gender": "MALE",
+            "icons": [],
+            "is_bawu": False,
+            "is_vip": False,
+            "is_god": False,
+            "priv_like": "PUBLIC",
+            "priv_reply": "ALL",
+        },
+        "title": "t",
+        "contents": [],
+        "create_time": 0,
+        "last_time": 0,
+        "agree_num": 0,
+        "disagree_num": 0,
+        "reply_num": 0,
+        "view_num": 0,
+        "share_num": 0,
+        "is_good": False,
+        "is_top": False,
+        "is_share": False,
+        "is_hide": False,
+        "is_livepost": False,
+        "is_help": False,
+        "thread_type": 0,
+        "tab_id": 0,
+        "share_origin": {"pid": 0, "tid": 0, "fid": 0, "fname": "", "author_id": 0, "title": "", "contents": []},
+    }
+    t = deserialize("thread", thread_data)
+    assert isinstance(t, ThreadDTO)
+
+    post_data = {
+        "pid": 1,
+        "tid": 1,
+        "fid": 1,
+        "fname": "f",
+        "author_id": 1,
+        "author": {
+            "user_id": 1,
+            "portrait": "p",
+            "user_name": "u",
+            "nick_name_new": "n",
+            "level": 1,
+            "glevel": 1,
+            "gender": "MALE",
+            "icons": [],
+            "is_bawu": False,
+            "is_vip": False,
+            "is_god": False,
+            "priv_like": "PUBLIC",
+            "priv_reply": "ALL",
+            "ip": "127.0.0.1",
+        },
+        "contents": [],
+        "create_time": 0,
+        "floor": 1,
+        "agree_num": 0,
+        "disagree_num": 0,
+        "reply_num": 0,
+        "is_aimeme": False,
+        "is_thread_author": False,
+        "sign": "",
+        "comments": [],
+    }
+    p = deserialize("post", post_data)
+    assert isinstance(p, PostDTO)
+
+    comment_data = {
+        "cid": 1,
+        "pid": 1,
+        "tid": 1,
+        "fid": 1,
+        "fname": "f",
+        "author_id": 1,
+        "author": {
+            "user_id": 1,
+            "portrait": "p",
+            "user_name": "u",
+            "nick_name_new": "n",
+            "level": 1,
+            "glevel": 1,
+            "gender": "MALE",
+            "icons": [],
+            "is_bawu": False,
+            "is_vip": False,
+            "is_god": False,
+            "priv_like": "PUBLIC",
+            "priv_reply": "ALL",
+        },
+        "contents": [],
+        "create_time": 0,
+        "floor": 1,
+        "agree_num": 0,
+        "disagree_num": 0,
+        "reply_to_id": 0,
+        "is_thread_author": False,
+    }
+    c = deserialize("comment", comment_data)
+    assert isinstance(c, CommentDTO)
+
+
+def test_deserialize_unsupported():
+    with pytest.raises(ValueError, match="Unsupported item_type"):
+        deserialize("invalid", {})  # type: ignore
+
+
+def test_normalize_contents_dict_fallback():
+    from tiebameow.serializer.serializer import _normalize_contents
+
+    # Test valid dict with objs
+    assert _normalize_contents({"objs": [1, 2]}) == [1, 2]
+    # Test dict without objs (fallback)
+    assert _normalize_contents({"other": 1}) == []
+    # Test none/other
+    assert _normalize_contents(None) == []

@@ -7,6 +7,7 @@ from tiebameow.models.dto import (
     BaseDTO,
     BaseThreadDTO,
     BaseUserDTO,
+    PostDTO,
     ThreadDTO,
     ThreadUserDTO,
 )
@@ -193,3 +194,22 @@ def test_base_dto_with_plain_pydantic_model() -> None:
     assert isinstance(obj.inner, PlainModel)
     assert obj.inner.x == 10
     assert obj.inner.y == 0
+
+
+def test_dto_list_none_handling() -> None:
+    # Test that None passed to a list field becomes []
+    class ListDTO(BaseDTO):
+        items: list[str]
+
+    data = {"items": None}
+    dto = ListDTO.from_incomplete_data(data)
+    assert dto.items == []
+
+
+def test_post_dto_comments_none_fix() -> None:
+    # Verify the specific user case where 'comments' is None
+    data = {"pid": 123, "comments": None}
+    # Should not raise ValidationError
+    dto = PostDTO.from_incomplete_data(data)
+    assert dto.comments == []
+    assert dto.pid == 123
