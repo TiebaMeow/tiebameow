@@ -3,8 +3,9 @@ from __future__ import annotations
 import operator
 import re
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from enum import StrEnum, unique
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 import pyparsing as pp
 
@@ -18,6 +19,7 @@ from ..schemas.rules import (
     RuleGroup,
     RuleNode,
 )
+from ..utils.time_utils import now_with_tz
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -360,12 +362,110 @@ class RuleEngineParser:
         Returns:
             pp.ParserElement: 值解析器元素。
         """
+
+        def try_parse_datetime(val: str) -> datetime | None:
+            val = val.replace("T", " ").strip()
+            fmt_list = [
+                "%Y-%m-%d %H:%M:%S",
+                "%Y-%m-%d %H:%M",
+                "%Y-%m-%d",
+                "%Y年%m月%d日 %H时%M分%S秒",
+                "%Y年%m月%d日 %H时%M分",
+                "%Y年%m月%d日",
+            ]
+            for fmt in fmt_list:
+                try:
+                    dt = datetime.strptime(val, fmt)
+                    return dt.replace(tzinfo=now_with_tz().tzinfo)
+                except ValueError:
+                    continue
+            return None
+
         quoted_str = (
             pp.QuotedString('"', esc_char="\\")
             | pp.QuotedString("'", esc_char="\\")
             | pp.QuotedString("“", end_quote_char="”", esc_char="\\")
             | pp.QuotedString("‘", end_quote_char="’", esc_char="\\")
         )
+        quoted_str.add_parse_action(lambda t: try_parse_datetime(cast("str", t[0])) or t[0])
+
+        # 1. ISO 8601 绝对时间 (YYYY-MM-DD HH:MM:SS) 与 中文日期格式
+        # 扩展支持由 Regex 直接捕获的无引号时间字符串
+        iso_pattern = r"\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?"
+        cn_pattern = r"\d{4}年\d{1,2}月\d{1,2}日(?:\s*\d{1,2}时\d{1,2}分(?:\d{1,2}秒)?)?"
+
+        # 组合模式，注意顺序
+        absolute_date_pattern = f"(?:{iso_pattern})|(?:{cn_pattern})"
+        iso_date = pp.Regex(absolute_date_pattern).set_name("absolute_date")
+
+        def parse_iso(t: Any) -> datetime | str:
+            val = str(t[0])
+            res = try_parse_datetime(val)
+            return res or val
+
+        iso_date.set_parse_action(parse_iso)
+
+        # 2. 相对时间处理函数
+        def parse_relative_time(amount: str | int, unit: str, direction: str = "ago") -> datetime:
+            """计算相对时间，例如 '3d' -> now - 3 days"""
+            now = now_with_tz()
+            val = int(amount)
+
+            delta_args = {}
+            if unit.lower() in ("d", "天"):
+                delta_args["days"] = val
+            elif unit.lower() in ("h", "小时", "时"):
+                delta_args["hours"] = val
+            elif unit.lower() in ("m", "分", "分钟"):
+                delta_args["minutes"] = val
+            elif unit.lower() in ("s", "秒"):
+                delta_args["seconds"] = val
+
+            delta = timedelta(**delta_args)
+
+            # 逻辑：'3天前' 或 '3d' (默认ago) -> now - delta
+            # 如果未来支持 '3天后' 可以判断 direction
+            return now - delta
+
+        # 匹配 DSL: 纯数字 + d/h/m/s (无空格)
+        dsl_unit = pp.one_of("d h m s", caseless=True)
+        relative_dsl = pp.Group(pp.Combine(pp.Word(pp.nums) + dsl_unit)).set_name("relative_dsl")
+
+        def action_dsl(t: Any) -> datetime:
+            # t[0] 是 Group 里的内容，如 "10d"
+            full_str = t[0][0]
+            unit = full_str[-1]
+            amount = full_str[:-1]
+            return parse_relative_time(amount, unit)
+
+        relative_dsl.set_parse_action(action_dsl)
+
+        # 匹配 CNL: 纯数字 + 中文单位 + (可选"前")
+        cnl_unit = pp.one_of("天 小时 时 分 分钟 秒")
+        # 允许数字和单位间有空格，允许后缀"前"
+        relative_cnl = pp.Group(pp.Word(pp.nums) + pp.Optional(pp.White()) + cnl_unit + pp.Optional("前")).set_name(
+            "relative_cnl"
+        )
+
+        def action_cnl(t: Any) -> datetime:
+            # t[0] 是一个 list，例如 ['3', '天'] 或 ['3', ' ', '天', '前']
+            # 取出数字和单位，忽略空格和后缀
+            parsed_list = t[0].as_list()
+            amount = parsed_list[0]
+            # 找到单位 (在 list 中找到属于 cnl_unit 候选词的项)
+            for item in parsed_list[1:]:
+                if item.strip() and item != "前":
+                    return parse_relative_time(amount, item)
+            # Fallback
+            return parse_relative_time(amount, parsed_list[1])
+
+        relative_cnl.set_parse_action(action_cnl)
+
+        # 3. 关键字 NOW
+        now_keyword = pp.CaselessLiteral("NOW").set_parse_action(lambda: now_with_tz())
+
+        # 组合时间解析器
+        datetime_expr = iso_date | relative_dsl | relative_cnl | now_keyword
 
         # 数字 (优先匹配浮点，再匹配整数)
         number = pp.common.number.set_parse_action(operator.itemgetter(0))
@@ -387,11 +487,13 @@ class RuleEngineParser:
 
         # boolean 必须放在 quoted_str 之前，或者作为独立分支
         list_val = (
-            pp.Suppress(lbrack) + pp.DelimitedList(boolean | quoted_str | number, delim=comma) + pp.Suppress(rbrack)
+            pp.Suppress(lbrack)
+            + pp.DelimitedList(boolean | datetime_expr | quoted_str | number, delim=comma)
+            + pp.Suppress(rbrack)
         )
         list_val.set_parse_action(lambda t: [t.as_list()])
 
-        return list_val | boolean | quoted_str | number
+        return list_val | boolean | datetime_expr | quoted_str | number
 
     def _build_identifier_parser(self, reserved_words: list[str]) -> pp.ParserElement:
         """
@@ -773,7 +875,14 @@ class RuleEngineParser:
             op_str = cfg.operators.get_primary_token(o_enum)
 
             val = node.value
-            if isinstance(val, str):
+
+            if isinstance(val, datetime):
+                # 格式：2023-01-01 12:00:00
+                val_str = val.strftime("%Y-%m-%d %H:%M:%S")
+                # 如果是整天，去掉时间部分让看起来更干净
+                if val.hour == 0 and val.minute == 0 and val.second == 0:
+                    val_str = val.strftime("%Y-%m-%d")
+            elif isinstance(val, str):
                 # CNL 模式下也可以根据喜好改用中文引号，这里默认使用双引号以保持 JSON 兼容性
                 val_str = f'"{val}"'
             elif isinstance(val, bool):
@@ -781,9 +890,14 @@ class RuleEngineParser:
                 bool_enum = BooleanType.TRUE if val else BooleanType.FALSE
                 val_str = cfg.booleans.get_primary_token(bool_enum)
             elif isinstance(val, list):
+
+                def fmt_item(x: Any) -> str:
+                    if isinstance(x, datetime):
+                        return x.strftime("%Y-%m-%d %H:%M:%S")
+                    return f'"{x}"' if isinstance(x, str) else str(x)
+
                 # 递归处理列表内元素
-                # 这里假设列表内是简单类型
-                items = [f'"{x}"' if isinstance(x, str) else str(x) for x in val]
+                items = [fmt_item(x) for x in val]
                 # 使用主要的括号符号
                 lb = cfg.punctuation.get_primary_token(PunctuationType.LBRACK)
                 rb = cfg.punctuation.get_primary_token(PunctuationType.RBRACK)
