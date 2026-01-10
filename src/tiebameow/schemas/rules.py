@@ -21,7 +21,7 @@ class FieldType(StrEnum):
     IS_SHARE = "is_share"  # 仅Thread
     IS_HIDE = "is_hide"  # 仅Thread
     TEXT = "text"
-    FULL_TEXT = "full_text"  # 仅Thread
+    FULL_TEXT = "full_text"
     LEVEL = "author.level"
     USER_ID = "author.user_id"
     PORTRAIT = "author.portrait"
@@ -186,7 +186,6 @@ class ReviewRule(BaseModel):
             FieldType.IS_TOP,
             FieldType.IS_SHARE,
             FieldType.IS_HIDE,
-            FieldType.FULL_TEXT,
             FieldType.VIEW_NUM,
             FieldType.SHARE_NUM,
             FieldType.LAST_TIME,

@@ -308,6 +308,10 @@ class PostDTO(BaseDTO):
         return text
 
     @cached_property
+    def full_text(self) -> str:
+        return self.text
+
+    @cached_property
     def images(self) -> list[FragImageModel]:
         images = [frag for frag in self.contents if isinstance(frag, FragImageModel)]
         return images
@@ -338,6 +342,10 @@ class CommentDTO(BaseDTO):
     def text(self) -> str:
         text = "".join(frag.text for frag in self.contents if isinstance(frag, TypeFragText))
         return text
+
+    @cached_property
+    def full_text(self) -> str:
+        return self.text
 
 
 class PageInfoDTO(BaseDTO):
