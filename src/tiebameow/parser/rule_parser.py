@@ -453,11 +453,8 @@ class RuleEngineParser:
             parsed_list = t[0].as_list()
             amount = parsed_list[0]
             # 找到单位 (在 list 中找到属于 cnl_unit 候选词的项)
-            for item in parsed_list[1:]:
-                if item.strip() and item != "前":
-                    return parse_relative_time(amount, item)
-            # Fallback
-            return parse_relative_time(amount, parsed_list[1])
+            unit = next(item for item in parsed_list[1:] if item.strip() and item != "前")
+            return parse_relative_time(amount, unit)
 
         relative_cnl.set_parse_action(action_cnl)
 
