@@ -1,6 +1,18 @@
+from typing import Any, cast
+
 import pytest
 from pydantic import ValidationError
 
+from tiebameow.schemas.fragments import (
+    FragAtModel,
+    FragEmojiModel,
+    FragImageModel,
+    FragItemModel,
+    FragLinkModel,
+    FragTextModel,
+    FragTiebaPlusModel,
+    FragUnknownModel,
+)
 from tiebameow.schemas.rules import (
     Action,
     ActionType,
@@ -12,6 +24,85 @@ from tiebameow.schemas.rules import (
     RuleGroup,
     TargetType,
 )
+
+# --- Fragments Tests ---
+
+
+def test_frag_text_model() -> None:
+    model = FragTextModel(text="hello")
+    assert model.type == "text"
+    assert model.text == "hello"
+
+
+def test_frag_at_model() -> None:
+    model = FragAtModel(text="@user", user_id=123)
+    assert model.type == "at"
+    assert model.text == "@user"
+    assert model.user_id == 123
+
+
+def test_frag_image_model() -> None:
+    model = FragImageModel(
+        src="http://src",
+        big_src="http://big",
+        origin_src="http://origin",
+        origin_size=100,
+        show_width=100,
+        show_height=100,
+        hash="hash",
+    )
+    assert model.type == "image"
+    assert model.src == "http://src"
+
+
+def test_frag_link_model() -> None:
+    model = FragLinkModel(text="http://link", title="title", raw_url="http://raw")
+    assert model.type == "link"
+    assert model.text == "http://link"
+
+    # Test validator
+    model_none = FragLinkModel(text="http://link", title="title", raw_url=cast("Any", None))
+    assert model_none.raw_url == ""
+
+
+def test_frag_emoji_model() -> None:
+    model = FragEmojiModel(id="1", desc="smile")
+    assert model.type == "emoji"
+    assert model.id == "1"
+    assert model.desc == "smile"
+
+
+def test_frag_item_model() -> None:
+    model = FragItemModel(text="item")
+    assert model.type == "item"
+    assert model.text == "item"
+
+
+def test_frag_unknown_model() -> None:
+    model = FragUnknownModel(raw_data="some data")
+    assert model.type == "unknown"
+    assert model.raw_data == "some data"
+
+
+def test_fragment_union() -> None:
+    t = FragTextModel(text="t")
+    assert isinstance(t, FragTextModel)
+
+
+def test_frag_tieba_plus_model_none_url():
+    """Test FragTiebaPlusModel with None url."""
+    model = FragTiebaPlusModel(url=None)  # type: ignore
+    assert model.url == ""
+    assert model.type == "tieba_plus"
+
+
+def test_frag_tieba_plus_model_str_url():
+    """Test FragTiebaPlusModel with string url."""
+    model = FragTiebaPlusModel(url="http://example.com")
+    assert model.url == "http://example.com"
+
+
+# --- Rules Tests ---
 
 
 def test_condition_model() -> None:

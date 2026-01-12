@@ -7,11 +7,12 @@ from tiebameow.models.dto import (
     BaseDTO,
     BaseThreadDTO,
     BaseUserDTO,
+    CommentDTO,
     PostDTO,
     ThreadDTO,
     ThreadUserDTO,
 )
-from tiebameow.schemas.fragments import FragTextModel
+from tiebameow.schemas.fragments import FragAtModel, FragImageModel, FragTextModel
 
 # --- Test Helpers ---
 
@@ -41,6 +42,19 @@ class PlainModel(BaseModel):
 
 class WrapperDTO(BaseDTO):
     inner: PlainModel
+
+
+class NestedModel(BaseModel):
+    name: str
+
+
+class ParentDTO(BaseDTO):
+    nested: NestedModel
+    nested_dto: BaseUserDTO
+    tags: set[str]
+    str_list: list[str]
+    str_dict: dict[str, int]
+    str_set: set[int]
 
 
 # --- Normal Tests ---
@@ -128,19 +142,25 @@ def test_thread_dto() -> None:
 # --- Zero-fill Tests ---
 
 
-def test_base_dto_zero_values() -> None:
-    """Test completely empty init fills with zero values."""
-    obj = SimpleDTO.from_incomplete_data({})
-    assert obj.name == ""
-    assert obj.age == 0
-    assert obj.score == 0.0
-    assert obj.is_active is False
-    assert obj.tags == []
-    assert obj.metadata == {}
+def test_base_dto_zero_values():
+    """Test various zero value generations."""
+    model = ParentDTO.from_incomplete_data({})
+    assert isinstance(model.nested, NestedModel)
+    assert model.nested.name == ""
+    assert isinstance(model.nested_dto, BaseUserDTO)
+    assert model.tags == set()
+    assert model.str_list == []
+    assert model.str_dict == {}
+    assert model.str_set == set()
 
-    # Test with None input
-    obj_none = SimpleDTO.from_incomplete_data(None)
-    assert obj_none.name == ""
+    obj_none = ParentDTO.from_incomplete_data(None)
+    assert isinstance(obj_none.nested, NestedModel)
+    assert obj_none.nested.name == ""
+    assert isinstance(obj_none.nested_dto, BaseUserDTO)
+    assert obj_none.tags == set()
+    assert obj_none.str_list == []
+    assert obj_none.str_dict == {}
+    assert obj_none.str_set == set()
 
 
 def test_base_dto_partial_values() -> None:
@@ -213,3 +233,128 @@ def test_post_dto_comments_none_fix() -> None:
     dto = PostDTO.from_incomplete_data(data)
     assert dto.comments == []
     assert dto.pid == 123
+
+
+def test_base_dto_from_incomplete_data_with_model():
+    """Test from_incomplete_data with BaseModel input."""
+    input_model = NestedModel(name="test")
+    _ = NestedModel.model_validate(input_model)
+
+    class TestDTO(BaseDTO):
+        name: str
+
+    res = TestDTO.from_incomplete_data(input_model)
+    assert res.name == "test"
+
+
+def test_get_zero_value_explicit_strings():
+    """Test _get_zero_value with explicit string types to hit specific branches."""
+
+    assert BaseDTO._get_zero_value("list[int]") == []
+    assert BaseDTO._get_zero_value("dict[str, int]") == {}
+    assert BaseDTO._get_zero_value("set[int]") == set()
+
+    assert BaseDTO._get_zero_value(set[int]) == set()
+
+    # Test generic string
+    assert BaseDTO._get_zero_value("some_other_type") is None
+
+
+def test_base_dto_nested_fallback():
+    """Test BaseDTO nested model fallback (lines 121-124)."""
+
+    # We need a field that is a BaseModel but NOT a BaseDTO
+    class SimpleModel(BaseModel):
+        val: int
+
+    class VerifyDTO(BaseDTO):
+        nested: SimpleModel
+
+    # from_incomplete_data({}) -> nested is None -> _get_zero_value(SimpleModel)
+    # This hits line 123-124: dummy_data construction & validation
+    dto = VerifyDTO.from_incomplete_data({})
+    assert isinstance(dto.nested, SimpleModel)
+    assert dto.nested.val == 0
+
+
+def test_base_dto_nested_base_dto():
+    """Test BaseDTO nested BaseDTO (lines 122)."""
+
+    class InnerDTO(BaseDTO):
+        inner_val: int
+
+    class OuterDTO(BaseDTO):
+        inner: InnerDTO
+
+    # from_incomplete_data({}) -> inner is None -> _get_zero_value(InnerDTO)
+    # InnerDTO is BaseDTO -> returns InnerDTO.from_incomplete_data({})
+    dto = OuterDTO.from_incomplete_data({})
+    assert isinstance(dto.inner, InnerDTO)
+    assert dto.inner.inner_val == 0
+
+
+def test_thread_dto_properties():
+    """Test cached properties of BaseThreadDTO (via ThreadDTO)."""
+
+    # Create manually to populate contents
+    contents = [
+        FragTextModel(text="Hello"),
+        FragImageModel(src="http://img.com"),
+        FragAtModel(text="@User", user_id=123),
+    ]
+    thread = ThreadDTO.from_incomplete_data({"title": "Title", "contents": contents})  # type: ThreadDTO
+
+    assert "Hello" in thread.text
+    assert "Title" in thread.full_text
+    assert "Hello" in thread.full_text
+    assert len(thread.images) == 1
+    assert thread.images[0].src == "http://img.com"
+    assert len(thread.ats) == 1
+    assert thread.ats[0] == 123
+
+    # Test empty contents
+    thread_empty = ThreadDTO.from_incomplete_data({"title": "Empty"})
+    assert thread_empty.text == ""
+    assert thread_empty.images == []
+    assert thread_empty.ats == []
+
+
+def test_post_dto_properties():
+    """Test cached properties of PostDTO."""
+    contents = [
+        FragTextModel(text="PostContent"),
+        FragImageModel(src="http://img.com"),
+        FragAtModel(text="@User", user_id=456),
+    ]
+    post = PostDTO.from_incomplete_data({"contents": contents})
+
+    assert "PostContent" in post.text
+    assert post.full_text == post.text
+    assert len(post.images) == 1
+    assert len(post.ats) == 1
+    assert post.ats[0] == 456
+
+
+def test_comment_dto_properties():
+    """Test cached properties of CommentDTO."""
+    contents = [FragTextModel(text="CommentContent"), FragAtModel(text="@User", user_id=789)]
+    comment = CommentDTO.from_incomplete_data({"contents": contents})
+
+    assert "CommentContent" in comment.text
+    assert comment.full_text == comment.text
+    assert len(comment.ats) == 1
+    assert comment.ats[0] == 789
+
+
+def test_zero_value_union_types():
+    from datetime import datetime
+
+    class UnionDTO(BaseDTO):
+        opt_int: int | None
+        opt_str: str | None
+        create_time: datetime
+
+    dto = UnionDTO.from_incomplete_data({})
+    assert dto.opt_int is None
+    assert dto.opt_str is None
+    assert dto.create_time == datetime.fromtimestamp(0)

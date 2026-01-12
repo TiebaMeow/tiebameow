@@ -7,7 +7,7 @@ from tiebameow.models.dto import PostDTO, ThreadDTO, ThreadUserDTO
 from tiebameow.renderer import Renderer
 from tiebameow.renderer.config import RenderConfig
 from tiebameow.renderer.playwright_core import PlaywrightCore
-from tiebameow.renderer.style import FONT_URL
+from tiebameow.renderer.style import FONT_URL, get_font_style
 from tiebameow.schemas.fragments import TypeFragText
 
 # --- Test PlaywrightCore ---
@@ -543,3 +543,19 @@ async def test_handle_route_forum_no_avatar(renderer):
 
     await renderer._handle_route(mock_route)
     mock_route.abort.assert_called()
+
+
+def test_get_font_style_not_exists():
+    with patch("pathlib.Path.exists", return_value=False):
+        style = get_font_style(16)
+        assert "<style>" in style
+        assert 'font-family: "Noto Sans SC"' in style
+        assert "font-size: 16px" in style
+        assert "@font-face" not in style
+
+
+def test_get_font_style_exists():
+    with patch("pathlib.Path.exists", return_value=True):
+        style = get_font_style(16)
+        assert "<style>" in style
+        assert "@font-face" in style
