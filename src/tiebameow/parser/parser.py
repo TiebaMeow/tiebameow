@@ -198,7 +198,7 @@ def convert_aiotieba_user(user: UserInfo_TUid) -> BaseUserDTO:  # type: ignore[o
 def convert_aiotieba_user(
     user: UserInfo_TUid | AiotiebaUserType | UserInfo,
 ) -> BaseUserDTO | ThreadUserDTO | UserInfoDTO:
-    if hasattr(user, "tieba_uid"):
+    if hasattr(user, "post_num"):
         return convert_aiotieba_userinfo(cast("UserInfo", user))
     if hasattr(user, "ip"):
         return convert_aiotieba_postuser(cast("UserInfo_p", user))
