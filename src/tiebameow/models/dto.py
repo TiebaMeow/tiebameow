@@ -7,7 +7,7 @@ from typing import Any, Literal, Self, get_args, get_origin
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from ..schemas.fragments import FragImageModel, Fragment, TypeFragText
+from ..schemas.fragments import FragAtModel, FragImageModel, Fragment, TypeFragText
 
 
 class BaseDTO(BaseModel):
@@ -239,6 +239,11 @@ class BaseThreadDTO(BaseDTO):
         images = [frag for frag in self.contents if isinstance(frag, FragImageModel)]
         return images
 
+    @cached_property
+    def ats(self) -> list[int]:
+        ats = [frag.user_id for frag in self.contents if isinstance(frag, FragAtModel)]
+        return ats
+
 
 class ThreadpDTO(BaseThreadDTO):
     author: ThreadUserDTO
@@ -316,6 +321,11 @@ class PostDTO(BaseDTO):
         images = [frag for frag in self.contents if isinstance(frag, FragImageModel)]
         return images
 
+    @cached_property
+    def ats(self) -> list[int]:
+        ats = [frag.user_id for frag in self.contents if isinstance(frag, FragAtModel)]
+        return ats
+
 
 class CommentDTO(BaseDTO):
     cid: int
@@ -346,6 +356,11 @@ class CommentDTO(BaseDTO):
     @cached_property
     def full_text(self) -> str:
         return self.text
+
+    @cached_property
+    def ats(self) -> list[int]:
+        ats = [frag.user_id for frag in self.contents if isinstance(frag, FragAtModel)]
+        return ats
 
 
 class PageInfoDTO(BaseDTO):

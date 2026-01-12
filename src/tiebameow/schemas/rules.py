@@ -22,6 +22,7 @@ class FieldType(StrEnum):
     IS_HIDE = "is_hide"  # 仅Thread
     TEXT = "text"
     FULL_TEXT = "full_text"
+    ATS = "ats"
     LEVEL = "author.level"
     USER_ID = "author.user_id"
     PORTRAIT = "author.portrait"
