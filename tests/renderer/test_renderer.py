@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 import yarl
 
-from tiebameow.models.dto import PostDTO, ThreadDTO, ThreadUserDTO
+from tiebameow.models.dto import CommentDTO, PostDTO, ThreadDTO, ThreadUserDTO
 from tiebameow.renderer import Renderer
 from tiebameow.renderer.config import RenderConfig
 from tiebameow.renderer.playwright_core import PlaywrightCore
@@ -351,6 +351,27 @@ async def test_render_content_post(renderer):
         context = mock_render.call_args.kwargs["data"]["content"]
         assert context["pid"] == 111
         assert context["floor"] == 2
+
+
+@pytest.mark.asyncio
+async def test_render_content_comment(renderer):
+    comment_dto = CommentDTO.from_incomplete_data({
+        "cid": 222,
+        "pid": 111,
+        "tid": 123,
+        "fname": "test_forum",
+        "fid": 1,
+        "floor": 2,
+        "author": {"user_name": "user", "nick_name_new": "nick", "portrait": "p", "level": 1},
+    })
+
+    with patch.object(renderer, "_render_image", AsyncMock(return_value=b"png")) as mock_render:
+        await renderer.render_content(comment_dto)
+        mock_render.assert_called_once()
+        context = mock_render.call_args.kwargs["data"]["content"]
+        assert context["pid"] == 222
+        assert context["floor"] == 2
+        assert context["nick_name"] == "nick"
 
 
 @pytest.mark.asyncio

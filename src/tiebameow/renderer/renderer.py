@@ -6,12 +6,12 @@ from typing import TYPE_CHECKING, Any, Literal
 
 import jinja2
 import yarl
-from aiotieba.api.get_posts._classdef import Thread_p
-from aiotieba.typing import Post, Thread
+from aiotieba.api.get_posts._classdef import Comment_p, Thread_p
+from aiotieba.typing import Comment, Post, Thread
 
 from ..client import Client
 from ..models.dto import CommentDTO, PostDTO, ThreadDTO, ThreadpDTO
-from ..parser import convert_aiotieba_post, convert_aiotieba_thread, convert_aiotieba_threadp
+from ..parser import convert_aiotieba_comment, convert_aiotieba_post, convert_aiotieba_thread, convert_aiotieba_threadp
 from ..utils.logger import logger
 from .config import RenderConfig
 from .playwright_core import PlaywrightCore
@@ -22,6 +22,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from playwright.async_api import Route
+
+    type RenderContentType = (
+        ThreadDTO | Thread | ThreadpDTO | Thread_p | PostDTO | Post | CommentDTO | Comment | Comment_p
+    )
 
 
 def format_date(dt: datetime | int | float) -> str:
@@ -262,7 +266,10 @@ class Renderer:
                 context["sub_text_list"].append(f"pid: {content.pid}")
             context["comments"] = [await self._build_content_context(c, max_image_count) for c in content.comments]
         elif isinstance(content, CommentDTO):
-            pass
+            context["pid"] = content.cid
+            context["floor"] = content.floor
+            if show_link:
+                context["sub_text_list"].append(f"pid: {content.cid}")
 
         if content.author.portrait:
             size: Literal["s", "m", "l"] = "s" if isinstance(content, CommentDTO) else "m"
@@ -317,7 +324,7 @@ class Renderer:
 
     async def render_content(
         self,
-        content: ThreadDTO | Thread | PostDTO | Post,
+        content: RenderContentType,
         *,
         max_image_count: int = 9,
         prefix_html: str | None = None,
@@ -345,8 +352,12 @@ class Renderer:
 
         if isinstance(content, Thread):
             content = convert_aiotieba_thread(content)
+        elif isinstance(content, Thread_p):
+            content = convert_aiotieba_threadp(content)
         elif isinstance(content, Post):
             content = convert_aiotieba_post(content)
+        elif isinstance(content, Comment | Comment_p):
+            content = convert_aiotieba_comment(content)
 
         content_context = await self._build_content_context(content, max_image_count)
 

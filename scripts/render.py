@@ -6,11 +6,8 @@ from pathlib import Path
 
 from tiebameow.models.dto import (
     CommentDTO,
-    CommentUserDTO,
     PostDTO,
-    PostUserDTO,
     ThreadDTO,
-    ThreadUserDTO,
 )
 from tiebameow.renderer import Renderer
 from tiebameow.schemas.fragments import FragTextModel
@@ -79,92 +76,114 @@ def register(filename: str) -> Callable[[Callable[[], Awaitable[bytes]]], Callab
     return wrapper
 
 
-FAKE_THREAD_DTO = ThreadDTO.model_construct(
-    tid=123456,
-    pid=654321,
-    fname="贴吧吧主",
-    title="测试标题",
-    author=ThreadUserDTO.model_construct(
-        nick_name_new="测试作者",
-        user_name="test_author",
-        portrait="",
-        level=6,
-        user_id=1,
-    ),
-    contents=[FragTextModel(text="这是一个测试内容，用于渲染测试。")],
-    create_time=1767196800,
-    agree_num=10,
-    share_num=5,
-    reply_num=20,
-)
+FAKE_THREAD_DTO = ThreadDTO.from_incomplete_data({
+    "tid": 123456,
+    "pid": 654321,
+    "fname": "贴吧吧主",
+    "title": "测试标题",
+    "author": {
+        "nick_name_new": "测试作者",
+        "user_name": "test_author",
+        "portrait": "",
+        "level": 6,
+        "user_id": 1,
+    },
+    "contents": [FragTextModel(text="这是一个测试内容，用于渲染测试。")],
+    "create_time": 1767196800,
+    "agree_num": 10,
+    "share_num": 5,
+    "reply_num": 20,
+})
 
 FAKE_POST_DTO_LIST = [
-    PostDTO.model_construct(
-        tid=123456,
-        pid=654322,
-        floor=2,
-        author=PostUserDTO.model_construct(
-            nick_name_new="路人甲",
-            user_name="lurenjia",
-            portrait="",
-            level=3,
-            user_id=2,
-        ),
-        contents=[FragTextModel(text="前排围观")],
-        create_time=1767196900,
-        comments=[],
-    ),
-    PostDTO.model_construct(
-        tid=123456,
-        pid=654323,
-        floor=3,
-        author=PostUserDTO.model_construct(
-            nick_name_new="路人乙",
-            user_name="lurenyi",
-            portrait="",
-            level=4,
-            user_id=3,
-        ),
-        contents=[FragTextModel(text="不明觉厉")],
-        create_time=1767197000,
-        comments=[
-            CommentDTO.model_construct(
-                author=CommentUserDTO.model_construct(
-                    nick_name_new="路人甲",
-                    user_name="lurenjia",
-                    portrait="",
-                    level=3,
-                    user_id=2,
-                ),
-                contents=[FragTextModel(text="确实")],
-                create_time=1767197100,
-                tid=123456,
-                pid=654323,
-            )
+    PostDTO.from_incomplete_data({
+        "tid": 123456,
+        "pid": 654322,
+        "floor": 2,
+        "author": {
+            "nick_name_new": "路人甲",
+            "user_name": "lurenjia",
+            "portrait": "",
+            "level": 3,
+            "user_id": 2,
+        },
+        "contents": [FragTextModel(text="前排围观")],
+        "create_time": 1767196900,
+        "comments": [],
+    }),
+    PostDTO.from_incomplete_data({
+        "tid": 123456,
+        "pid": 654323,
+        "floor": 3,
+        "author": {
+            "nick_name_new": "路人乙",
+            "user_name": "lurenyi",
+            "portrait": "",
+            "level": 4,
+            "user_id": 3,
+        },
+        "contents": [FragTextModel(text="不明觉厉")],
+        "create_time": 1767197000,
+        "comments": [
+            CommentDTO.from_incomplete_data({
+                "author": {
+                    "nick_name_new": "路人甲",
+                    "user_name": "lurenjia",
+                    "portrait": "",
+                    "level": 3,
+                    "user_id": 2,
+                },
+                "contents": [FragTextModel(text="确实")],
+                "create_time": 1767197100,
+                "tid": 123456,
+                "pid": 654323,
+            })
         ],
-    ),
-    PostDTO.model_construct(
-        tid=123456,
-        pid=654324,
-        floor=4,
-        author=PostUserDTO.model_construct(
-            nick_name_new="测试作者",
-            user_name="test_author",
-            portrait="",
-            level=6,
-            user_id=1,
-        ),
-        contents=[FragTextModel(text="自己顶一下")],
-        create_time=1767197200,
-        comments=[],
-    ),
+    }),
+    PostDTO.from_incomplete_data({
+        "tid": 123456,
+        "pid": 654324,
+        "floor": 4,
+        "author": {
+            "nick_name_new": "测试作者",
+            "user_name": "test_author",
+            "portrait": "",
+            "level": 6,
+            "user_id": 1,
+        },
+        "contents": [FragTextModel(text="自己顶一下")],
+        "create_time": 1767197200,
+        "comments": [],
+    }),
 ]
+
+FAKE_COMMENT_DTO = CommentDTO.from_incomplete_data({
+    "author": {
+        "nick_name_new": "路人甲",
+        "user_name": "lurenjia",
+        "portrait": "",
+        "level": 3,
+        "user_id": 2,
+    },
+    "contents": [FragTextModel(text="难道说？")],
+    "create_time": 1767197100,
+    "tid": 123456,
+    "pid": 654323,
+    "cid": 111222,
+    "floor": 2,
+})
 
 
 @register("thread_content.png")
 async def render_thread_content() -> bytes:
     renderer = await Manager.get_renderer()
     return await renderer.render_content(FAKE_THREAD_DTO)
+
+
+@register("comment_content.png")
+async def render_comment_content() -> bytes:
+    renderer = await Manager.get_renderer()
+    return await renderer.render_content(FAKE_COMMENT_DTO)
 
 
 @register("thread_detail.png")
