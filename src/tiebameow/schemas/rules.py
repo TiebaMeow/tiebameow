@@ -179,6 +179,8 @@ class ReviewRule(BaseModel):
     Attributes:
         id: 规则唯一标识 ID。
         fid: 贴吧 fid。
+        forum_rule_id: 吧内规则标识 ID。
+        uploader_id: 规则创建者的用户 ID。
         target_type: 规则适用的目标类型，如 'all', 'thread', 'post', 'comment'。
         name: 规则名称。
         enabled: 是否启用该规则。
@@ -190,6 +192,7 @@ class ReviewRule(BaseModel):
     id: int
     fid: int
     forum_rule_id: int
+    uploader_id: int
     target_type: TargetType
     name: str
     enabled: bool

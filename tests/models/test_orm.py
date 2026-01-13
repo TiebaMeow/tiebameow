@@ -314,6 +314,7 @@ class TestORMMethods:
             id=1,
             fid=10,
             forum_rule_id=2,
+            uploader_id=3,
             name="test",
             trigger=trigger,
             actions=act,

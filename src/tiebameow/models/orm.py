@@ -507,8 +507,9 @@ class ReviewRules(RuleBase):
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    fid: Mapped[int] = mapped_column(Integer, nullable=False)
+    fid: Mapped[int] = mapped_column(BIGINT, nullable=False)
     forum_rule_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    uploader_id: Mapped[int] = mapped_column(BIGINT, default=0, nullable=False)
     target_type: Mapped[TargetType] = mapped_column(
         Enum(TargetType, name="target_type_enum"),
         index=True,
@@ -541,6 +542,7 @@ class ReviewRules(RuleBase):
         return cls(
             fid=review_rule.fid,
             forum_rule_id=review_rule.forum_rule_id,
+            uploader_id=review_rule.uploader_id,
             target_type=review_rule.target_type,
             name=review_rule.name,
             enabled=review_rule.enabled,
@@ -560,6 +562,7 @@ class ReviewRules(RuleBase):
             id=self.id,
             fid=self.fid,
             forum_rule_id=self.forum_rule_id,
+            uploader_id=self.uploader_id,
             target_type=self.target_type,
             name=self.name,
             enabled=self.enabled,
