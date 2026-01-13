@@ -190,6 +190,17 @@ class TestRuleEngineParserBasic:
         node2 = parser.parse_rule(dumped, mode="dsl")
         assert node == node2
 
+    def test_dump_actions(self, parser: RuleEngineParser):
+        actions = Actions(
+            delete=DeleteAction(enabled=False),
+            ban=BanAction(enabled=True, days=5),
+            notify=NotifyAction(enabled=True, template="tpl", params={"key": "value"}),
+        )
+        dumped = parser.dump_actions(actions, mode="cnl")
+        assert "封禁(days=5)" in dumped
+        assert '通知(key="value", template="tpl")' in dumped
+        assert "删除()" not in dumped
+
     def test_scan_rules(self, parser: RuleEngineParser):
         text = 'Rule 1: title contains "spam"\nRule 2: (author.level < 3)'
         rules = list(parser.scan_rules(text, mode="dsl"))

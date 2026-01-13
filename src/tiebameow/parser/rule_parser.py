@@ -971,7 +971,7 @@ class RuleEngineParser:
             p_str = comma.join(params_parts)
             return f"{t_name}{lb}{p_str}{rb}"
 
-        if actions.delete:
+        if actions.delete.enabled:
             parts.append(make_call(ActionType.DELETE, {}))
 
         if actions.ban.enabled:
