@@ -274,6 +274,7 @@ CNL_CONFIG = LangConfig.create(
         FieldType.IS_HIDE: ["隐藏", "隐藏贴", "隐藏帖"],
         FieldType.TEXT: ["内容", "文本"],
         FieldType.FULL_TEXT: ["完整内容", "全文"],
+        FieldType.ATS: ["@用户", "艾特"],
         FieldType.LEVEL: ["等级", "用户等级"],
         FieldType.USER_ID: "user_id",
         FieldType.PORTRAIT: "portrait",
