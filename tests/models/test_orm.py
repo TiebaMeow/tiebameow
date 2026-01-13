@@ -11,7 +11,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sess
 
 from tiebameow.models.dto import BaseUserDTO, CommentDTO, PostDTO, ThreadDTO
 from tiebameow.models.orm import (
-    ActionListType,
+    ActionsType,
     Comment,
     Fragment,
     FragmentListType,
@@ -25,11 +25,13 @@ from tiebameow.models.orm import (
 )
 from tiebameow.schemas.fragments import FragImageModel, FragTextModel
 from tiebameow.schemas.rules import (
-    Action,
-    ActionType,
+    Actions,
+    BanAction,
     Condition,
+    DeleteAction,
     FieldType,
     LogicType,
+    NotifyAction,
     OperatorType,
     ReviewRule,
     RuleGroup,
@@ -112,10 +114,7 @@ def test_rule_db_model_types(session: Session) -> None:
             Condition(field=FieldType.LEVEL, operator=OperatorType.LT, value=3),
         ],
     )
-    actions = [
-        Action(type=ActionType.DELETE),
-        Action(type=ActionType.BAN, params={"duration": 1}),
-    ]
+    actions = Actions(delete=DeleteAction(enabled=True), ban=BanAction(enabled=True, days=1))
 
     # Create rule
     rule = ReviewRules(
@@ -139,12 +138,10 @@ def test_rule_db_model_types(session: Session) -> None:
     assert loaded_rule.trigger.conditions[0].field == FieldType.TEXT
 
     # Check actions serialization/deserialization
-    assert isinstance(loaded_rule.actions, list)
-    assert len(loaded_rule.actions) == 2
-    assert isinstance(loaded_rule.actions[0], Action)
-    assert loaded_rule.actions[0].type == ActionType.DELETE
-    assert loaded_rule.actions[1].type == ActionType.BAN
-    assert loaded_rule.actions[1].params["duration"] == 1
+    assert isinstance(loaded_rule.actions, Actions)
+    assert loaded_rule.actions.delete.enabled is True
+    assert loaded_rule.actions.ban.enabled is True
+    assert loaded_rule.actions.ban.days == 1
 
 
 def test_rule_node_type_manual_check() -> None:
@@ -166,21 +163,21 @@ def test_rule_node_type_manual_check() -> None:
     assert type_impl.process_result_value(None, dialect) is None
 
 
-def test_action_list_type_manual_check() -> None:
-    type_impl = ActionListType()
+def test_actions_type_manual_check() -> None:
+    type_impl = ActionsType()
     dialect: Any = None
 
     # Bind param
-    actions = [Action(type=ActionType.NOTIFY, params={"msg": "hi"})]
+    actions = Actions(notify=NotifyAction(enabled=True, template="hi"))
     dumped = type_impl.process_bind_param(actions, dialect)
-    assert isinstance(dumped, list)
-    assert dumped[0]["type"] == "notify"
+    assert isinstance(dumped, dict)
+    assert dumped["notify"]["enabled"] is True
 
     # Result value
     loaded = type_impl.process_result_value(dumped, dialect)
-    assert isinstance(loaded, list)
-    assert isinstance(loaded[0], Action)
-    assert loaded[0].type == ActionType.NOTIFY
+    assert isinstance(loaded, Actions)
+    assert loaded.notify.enabled is True
+    assert loaded.notify.template == "hi"
     assert type_impl.process_bind_param(None, dialect) is None
     assert type_impl.process_result_value(None, dialect) is None
 
@@ -222,8 +219,8 @@ def test_rule_node_type_postgres():
     assert isinstance(res, JSONB)
 
 
-def test_action_list_type_postgres():
-    type_impl = ActionListType()
+def test_actions_type_postgres():
+    type_impl = ActionsType()
     mock_dialect = Mock()
     mock_dialect.name = "postgresql"
     mock_dialect.type_descriptor = Mock(side_effect=lambda x: x)
@@ -311,7 +308,7 @@ class TestORMMethods:
 
     def test_review_rules_conversion(self):
         trigger = Condition(field=FieldType.TEXT, operator=OperatorType.EQ, value="x")
-        act = Action(type=ActionType.DELETE)
+        act = Actions(delete=DeleteAction(enabled=True))
 
         rule_data = ReviewRule(
             id=1,
@@ -319,7 +316,7 @@ class TestORMMethods:
             forum_rule_id=2,
             name="test",
             trigger=trigger,
-            actions=[act],
+            actions=act,
             target_type=TargetType.POST,
             enabled=True,
             priority=1,

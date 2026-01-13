@@ -137,18 +137,38 @@ class RuleGroup(BaseModel):
 type RuleNode = Condition | RuleGroup
 
 
-class Action(BaseModel):
-    """匹配命中后的动作。
+class DeleteAction(BaseModel):
+    """删除动作配置。"""
 
-    定义了当规则匹配成功时应执行的操作。
+    enabled: bool = False
+    params: dict[str, Any] = Field(default_factory=dict)
 
-    Attributes:
-        type: 动作类型，如 'delete', 'ban', 'notify'。
-        params: 动作参数字典，具体内容取决于动作类型。
+
+class BanAction(BaseModel):
+    """封禁动作配置。"""
+
+    enabled: bool = False
+    days: int = Field(default=1, ge=1, le=10)
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class NotifyAction(BaseModel):
+    """通知动作配置。"""
+
+    enabled: bool = False
+    template: str = ""
+    params: dict[str, Any] = Field(default_factory=dict)
+
+
+class Actions(BaseModel):
+    """匹配命中后的动作集合。
+
+    定义了当规则匹配成功时应执行的操作集合。
     """
 
-    type: ActionType
-    params: dict[str, Any] = Field(default_factory=dict)
+    delete: DeleteAction = Field(default_factory=DeleteAction)
+    ban: BanAction = Field(default_factory=BanAction)
+    notify: NotifyAction = Field(default_factory=NotifyAction)
 
 
 class ReviewRule(BaseModel):
@@ -164,7 +184,7 @@ class ReviewRule(BaseModel):
         enabled: 是否启用该规则。
         priority: 规则优先级，数字越大越先执行。
         trigger: 规则触发条件的逻辑树根节点。
-        actions: 规则命中后执行的动作列表。
+        actions: 规则命中后执行的动作配置。
     """
 
     id: int
@@ -175,7 +195,7 @@ class ReviewRule(BaseModel):
     enabled: bool
     priority: int
     trigger: RuleNode
-    actions: list[Action]
+    actions: Actions
 
     @model_validator(mode="after")
     def validate_trigger_match_target(self) -> Self:

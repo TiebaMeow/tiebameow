@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, rela
 from sqlalchemy.types import TypeDecorator, TypeEngine
 
 from ..schemas.fragments import FRAG_MAP, Fragment, FragUnknownModel
-from ..schemas.rules import Action, ReviewRule, RuleNode, TargetType
+from ..schemas.rules import Actions, ReviewRule, RuleNode, TargetType
 from ..utils.time_utils import now_with_tz
 
 if TYPE_CHECKING:
@@ -116,27 +116,27 @@ class RuleNodeType(TypeDecorator[RuleNode]):
         return self.adapter.validate_python(value)
 
 
-class ActionListType(TypeDecorator[list[Action]]):
-    """自动处理Action模型列表的JSON序列化与反序列化。"""
+class ActionsType(TypeDecorator[Actions]):
+    """自动处理Actions模型的JSON序列化与反序列化。"""
 
     impl = JSON
     cache_ok = True
 
     def __init__(self, *args: object, **kwargs: object):
         super().__init__(*args, **kwargs)
-        self.adapter: TypeAdapter[list[Action]] = TypeAdapter(list[Action])
+        self.adapter: TypeAdapter[Actions] = TypeAdapter(Actions)
 
     def load_dialect_impl(self, dialect: Dialect) -> TypeEngine[Any]:
         if dialect.name == "postgresql":
             return dialect.type_descriptor(JSONB())
         return dialect.type_descriptor(JSON())
 
-    def process_bind_param(self, value: list[Action] | None, dialect: Dialect) -> list[dict[str, Any]] | None:
+    def process_bind_param(self, value: Actions | None, dialect: Dialect) -> dict[str, Any] | None:
         if value is None:
             return None
-        return cast("list[dict[str, Any]]", self.adapter.dump_python(value, mode="json"))
+        return cast("dict[str, Any]", self.adapter.dump_python(value, mode="json"))
 
-    def process_result_value(self, value: list[dict[str, Any]] | None, dialect: Dialect) -> list[Action] | None:
+    def process_result_value(self, value: dict[str, Any] | None, dialect: Dialect) -> Actions | None:
         if value is None:
             return None
         return self.adapter.validate_python(value)
@@ -519,7 +519,7 @@ class ReviewRules(RuleBase):
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     trigger: Mapped[RuleNode] = mapped_column(RuleNodeType, index=True, nullable=False)
-    actions: Mapped[list[Action]] = mapped_column(MutableList.as_mutable(ActionListType), nullable=False)
+    actions: Mapped[Actions] = mapped_column(ActionsType, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_with_tz, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), index=True, default=now_with_tz, onupdate=now_with_tz, nullable=False

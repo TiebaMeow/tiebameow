@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal, cast
 import pyparsing as pp
 
 from ..schemas.rules import (
-    Action,
+    Actions,
     ActionType,
     Condition,
     FieldType,
@@ -723,21 +723,21 @@ class RuleEngineParser:
 
         raise ValueError(f"Unexpected parse item: {parsed_item}")
 
-    def _to_actions(self, parsed_res: Any, cfg: LangConfig) -> list[Action]:
+    def _to_actions(self, parsed_res: Any, cfg: LangConfig) -> Actions:
         """
-        将动作解析结果转换为 Action 对象列表。
+        将动作解析结果转换为 Actions 对象。
 
         Args:
             parsed_res: pyparsing 解析结果。
             cfg: 当前语言配置。
 
         Returns:
-            list[Action]: 转换后的动作对象列表。
+            Actions: 转换后的动作对象。
 
         Raises:
-            ValueError: 如果动作类型未知。
+            ValueError: 如果动作类型未知或存在冲突配置。
         """
-        actions = []
+        actions = Actions()
         for item in parsed_res:
             raw_type = item.type
             raw_params = item.params.as_dict()
@@ -746,7 +746,22 @@ class RuleEngineParser:
             if not type_enum:
                 raise ValueError(f"Unknown action type: {raw_type}")
 
-            actions.append(Action(type=type_enum, params=raw_params))
+            if type_enum == ActionType.DELETE:
+                actions.delete.enabled = True
+
+            elif type_enum == ActionType.BAN:
+                if actions.ban.enabled:
+                    raise ValueError("Multiple ban actions detected")
+                actions.ban.enabled = True
+                actions.ban.days = int(raw_params.get("days", 1))
+
+            elif type_enum == ActionType.NOTIFY:
+                if actions.notify.enabled:
+                    raise ValueError("Multiple notify actions detected")
+                actions.notify.enabled = True
+                actions.notify.template = raw_params.pop("template", None)
+                actions.notify.params = raw_params
+
         return actions
 
     def parse_rule(self, text: str, mode: Literal["dsl", "cnl"] = "dsl") -> RuleNode:
@@ -775,18 +790,18 @@ class RuleEngineParser:
             # 增强错误提示：可视化指出错误位置
             raise ValueError(f"Parsing failed at position {e.col}:\n{e.line}\n{' ' * (e.col - 1)}^\n{e}") from e
 
-    def parse_actions(self, text: str, mode: Literal["dsl", "cnl"] = "dsl") -> list[Action]:
+    def parse_actions(self, text: str, mode: Literal["dsl", "cnl"] = "dsl") -> Actions:
         """
         解析动作字符串。
 
-        将输入的动作字符串解析为 Action 对象列表。支持 "动作名(参数)" 的调用格式。
+        将输入的动作字符串解析为 Actions 对象。支持 "动作名(参数)" 的调用格式。
 
         Args:
             text: 待解析的动作字符串。
             mode: 解析模式，可选 "dsl" (默认) 或 "cnl"。
 
         Returns:
-            list[Action]: 解析生成的动作对象列表。
+            Actions: 解析生成的动作对象。
 
         Raises:
             ValueError: 当语法无法匹配或动作名未知时抛出。
@@ -926,12 +941,12 @@ class RuleEngineParser:
 
         raise ValueError(f"Unknown node type: {type(node)}")
 
-    def dump_actions(self, actions: list[Action], mode: Literal["dsl", "cnl"] = "dsl") -> str:
+    def dump_actions(self, actions: Actions, mode: Literal["dsl", "cnl"] = "dsl") -> str:
         """
-        将 Action 列表序列化为动作字符串。
+        将 Actions 对象序列化为动作字符串。
 
         Args:
-            actions: 动作列表。
+            actions: 动作对象。
             mode: 输出模式，可选 "dsl" (默认) 或 "cnl"。
 
         Returns:
@@ -939,23 +954,33 @@ class RuleEngineParser:
         """
         cfg = DSL_CONFIG if mode == "dsl" else CNL_CONFIG
         parts = []
-        for act in actions:
-            a_enum = ActionType(act.type)
-            t_name = cfg.actions.get_primary_token(a_enum)
 
+        # 获取标点
+        lb = cfg.punctuation.get_primary_token(PunctuationType.LPAR)
+        rb = cfg.punctuation.get_primary_token(PunctuationType.RPAR)
+        comma = cfg.punctuation.get_primary_token(PunctuationType.COMMA) + " "
+        eq = cfg.punctuation.get_primary_token(PunctuationType.ASSIGN)
+
+        def make_call(act_type: ActionType, params: dict[str, Any]) -> str:
+            t_name = cfg.actions.get_primary_token(act_type)
             params_parts = []
-            for k, v in act.params.items():
+            for k, v in params.items():
                 v_str = f'"{v}"' if isinstance(v, str) else str(v)
-                # 使用等号
-                eq = cfg.punctuation.get_primary_token(PunctuationType.ASSIGN)
                 params_parts.append(f"{k}{eq}{v_str}")
-
-            lb = cfg.punctuation.get_primary_token(PunctuationType.LPAR)
-            rb = cfg.punctuation.get_primary_token(PunctuationType.RPAR)
-            comma = cfg.punctuation.get_primary_token(PunctuationType.COMMA) + " "
-
             p_str = comma.join(params_parts)
-            parts.append(f"{t_name}{lb}{p_str}{rb}")
+            return f"{t_name}{lb}{p_str}{rb}"
+
+        if actions.delete:
+            parts.append(make_call(ActionType.DELETE, {}))
+
+        if actions.ban.enabled:
+            parts.append(make_call(ActionType.BAN, {"days": actions.ban.days}))
+
+        if actions.notify.enabled:
+            p = actions.notify.params.copy()
+            if actions.notify.template:
+                p["template"] = actions.notify.template
+            parts.append(make_call(ActionType.NOTIFY, p))
 
         prefix = cfg.punctuation.get_primary_token(PunctuationType.ACTION_PREFIX)
         colon = cfg.punctuation.get_primary_token(PunctuationType.COLON)

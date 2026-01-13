@@ -8,10 +8,12 @@ import pytest
 
 from tiebameow.parser.rule_parser import DSL_CONFIG, Condition, RuleEngineParser, RuleGroup, TokenMap
 from tiebameow.schemas.rules import (
-    Action,
-    ActionType,
+    Actions,
+    BanAction,
+    DeleteAction,
     FieldType,
     LogicType,
+    NotifyAction,
     OperatorType,
 )
 from tiebameow.utils.time_utils import SHANGHAI_TZ
@@ -154,16 +156,30 @@ class TestRuleEngineParserBasic:
         assert not parser.validate("未知字段等于1", mode="cnl")[0]
 
     def test_parse_actions(self, parser: RuleEngineParser):
-        dsl_text = "DO: delete(reason='bad'), ban(day=1)"
+        dsl_text = "DO: delete(), ban(days=1)"
         actions = parser.parse_actions(dsl_text, mode="dsl")
-        assert len(actions) == 2
-        assert actions[0].type == ActionType.DELETE
-        assert actions[1].type == ActionType.BAN
+        assert actions.delete.enabled is True
+        assert actions.ban.enabled is True
+        assert actions.ban.days == 1
 
-        cnl_text = "执行：删除(reason='广告'), 封禁（days=3）"
+        cnl_text = "执行：删除(), 封禁（days=3）"
         actions_cnl = parser.parse_actions(cnl_text, mode="cnl")
-        assert len(actions_cnl) == 2
-        assert actions_cnl[0].type == ActionType.DELETE
+        assert actions_cnl.delete.enabled is True
+        assert actions_cnl.ban.enabled is True
+        assert actions_cnl.ban.days == 3
+
+    def test_parse_actions_duplicates(self, parser: RuleEngineParser):
+        # Delete idempotency
+        actions = parser.parse_actions("DO: delete(), delete()", mode="dsl")
+        assert actions.delete.enabled is True
+
+        # Ban conflict
+        with pytest.raises(ValueError, match="Multiple ban actions"):
+            parser.parse_actions("DO: ban(days=1), ban(days=2)", mode="dsl")
+
+        # Notify conflict
+        with pytest.raises(ValueError, match="Multiple notify actions"):
+            parser.parse_actions("DO: notify(template='a'), notify(template='b')", mode="dsl")
 
     # === 5. Dump & Scan ===
 
@@ -350,16 +366,17 @@ class TestRuleParserEdgeCasesAndCoverage:
         assert '["a", "b"]' in res or "['a', 'b']" in res
 
     def test_dump_actions_full(self, parser):
-        actions = [
-            Action(type=ActionType.DELETE, params={"reason": "foo"}),
-            Action(type=ActionType.BAN, params={"day": 7}),
-        ]
+        actions = Actions(
+            delete=DeleteAction(enabled=True, params={"reason": "violation"}),
+            ban=BanAction(enabled=True, days=7, params={"appeal": False}),
+            notify=NotifyAction(enabled=True, template="tpl", params={"a": 1}),
+        )
         dumped = parser.dump_actions(actions, mode="dsl")
         # standardize quotes for checking
         dumped_fixed = dumped.replace("'", '"')
         assert "DO:" in dumped_fixed
-        assert 'delete(reason="foo")' in dumped_fixed
-        assert "ban(day=7)" in dumped_fixed
+        assert "delete()" in dumped_fixed
+        assert "ban(days=7)" in dumped_fixed
 
     def test_parse_actions_error(self, parser):
         from pyparsing import ParseException

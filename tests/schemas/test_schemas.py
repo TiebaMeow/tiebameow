@@ -14,11 +14,13 @@ from tiebameow.schemas.fragments import (
     FragUnknownModel,
 )
 from tiebameow.schemas.rules import (
-    Action,
-    ActionType,
+    Actions,
+    BanAction,
     Condition,
+    DeleteAction,
     FieldType,
     LogicType,
+    NotifyAction,
     OperatorType,
     ReviewRule,
     RuleGroup,
@@ -131,19 +133,25 @@ def test_rule_group_nested() -> None:
     assert isinstance(outer_group.conditions[0], RuleGroup)
 
 
-def test_action_model() -> None:
-    action = Action(type=ActionType.DELETE, params={"reason": "spam"})
-    assert action.type == ActionType.DELETE
-    assert action.params == {"reason": "spam"}
+def test_actions_model() -> None:
+    actions = Actions(delete=DeleteAction(enabled=True))
+    assert actions.delete.enabled is True
+    assert actions.ban.enabled is False
 
-    action_default = Action(type=ActionType.BAN)
-    assert action_default.type == ActionType.BAN
-    assert action_default.params == {}
+    actions = Actions(ban=BanAction(enabled=True, days=3))
+    assert actions.delete.enabled is False
+    assert actions.ban.enabled is True
+    assert actions.ban.days == 3
+
+    actions = Actions(notify=NotifyAction(enabled=True, template="tmpl", params={"a": 1}))
+    assert actions.notify.enabled is True
+    assert actions.notify.template == "tmpl"
+    assert actions.notify.params == {"a": 1}
 
 
 def test_review_rule_model() -> None:
     cond = Condition(field=FieldType.TEXT, operator=OperatorType.CONTAINS, value="bad")
-    action = Action(type=ActionType.DELETE)
+    actions = Actions(delete=DeleteAction(enabled=True))
     rule = ReviewRule(
         id=1,
         fid=123,
@@ -153,18 +161,18 @@ def test_review_rule_model() -> None:
         enabled=True,
         priority=10,
         trigger=cond,
-        actions=[action],
+        actions=actions,
     )
     assert rule.id == 1
     assert rule.fid == 123
     assert rule.target_type == TargetType.ALL
     assert rule.trigger == cond
-    assert len(rule.actions) == 1
+    assert rule.actions.delete.enabled is True
 
 
 def test_review_rule_target_type() -> None:
     cond = Condition(field=FieldType.TEXT, operator=OperatorType.CONTAINS, value="bad")
-    action = Action(type=ActionType.DELETE)
+    actions = Actions(delete=DeleteAction(enabled=True))
     rule = ReviewRule(
         id=1,
         fid=123,
@@ -174,13 +182,13 @@ def test_review_rule_target_type() -> None:
         enabled=True,
         priority=10,
         trigger=cond,
-        actions=[action],
+        actions=actions,
     )
     assert rule.target_type == TargetType.POST
 
 
 def test_validate_trigger_compatibility() -> None:
-    action = Action(type=ActionType.DELETE)
+    actions = Actions(delete=DeleteAction(enabled=True))
 
     # 1. Valid: Thread rule with thread-specific field
     cond_thread = Condition(field=FieldType.TITLE, operator=OperatorType.CONTAINS, value="t")
@@ -193,7 +201,7 @@ def test_validate_trigger_compatibility() -> None:
         enabled=True,
         priority=10,
         trigger=cond_thread,
-        actions=[action],
+        actions=actions,
     )
     assert rule.target_type == TargetType.THREAD
 
@@ -208,7 +216,7 @@ def test_validate_trigger_compatibility() -> None:
             enabled=True,
             priority=10,
             trigger=cond_thread,
-            actions=[action],
+            actions=actions,
         )
     assert "Field 'title' is not valid for target_type 'post'" in str(exc.value)
 
@@ -224,7 +232,7 @@ def test_validate_trigger_compatibility() -> None:
             enabled=True,
             priority=10,
             trigger=cond_reply,
-            actions=[action],
+            actions=actions,
         )
     assert "Field 'reply_num' is not valid for target_type 'comment'" in str(exc.value)
 
@@ -239,7 +247,7 @@ def test_validate_trigger_compatibility() -> None:
         enabled=True,
         priority=10,
         trigger=cond_common,
-        actions=[action],
+        actions=actions,
     )
 
     # 5. Invalid: All rule with thread-specific field
@@ -253,7 +261,7 @@ def test_validate_trigger_compatibility() -> None:
             enabled=True,
             priority=10,
             trigger=cond_thread,
-            actions=[action],
+            actions=actions,
         )
     assert "Field 'title' is not valid for target_type 'all'" in str(exc.value)
 
@@ -275,6 +283,6 @@ def test_validate_trigger_compatibility() -> None:
             enabled=True,
             priority=10,
             trigger=group_invalid,
-            actions=[action],
+            actions=actions,
         )
     assert "Field 'title' is not valid for target_type 'post'" in str(exc.value)
