@@ -232,8 +232,8 @@ class User(MixinBase):
         return cls(
             user_id=dto.user_id,
             portrait=dto.portrait,
-            user_name=dto.user_name,
-            nick_name=dto.nick_name,
+            user_name=dto.user_name.replace("\x00", ""),
+            nick_name=dto.nick_name.replace("\x00", ""),
         )
 
 
