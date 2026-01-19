@@ -1,5 +1,5 @@
 from collections.abc import Iterator
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 from unittest.mock import Mock
 
@@ -161,6 +161,22 @@ def test_rule_node_type_manual_check() -> None:
     # None handling
     assert type_impl.process_bind_param(None, dialect) is None
     assert type_impl.process_result_value(None, dialect) is None
+
+
+def test_rule_node_type_datetime_roundtrip() -> None:
+    type_impl = RuleNodeType()
+    dialect: Any = None
+
+    dt = datetime(2024, 1, 2, 3, 4, 5, tzinfo=UTC)
+    cond = Condition(field=FieldType.CREATE_TIME, operator=OperatorType.GTE, value=dt)
+
+    dumped = type_impl.process_bind_param(cond, dialect)
+    assert dumped == {"field": "create_time", "operator": "gte", "value": dt.isoformat()}
+
+    loaded = type_impl.process_result_value(dumped, dialect)
+    assert isinstance(loaded, Condition)
+    assert loaded.field == FieldType.CREATE_TIME
+    assert loaded.value == dt
 
 
 def test_actions_type_manual_check() -> None:

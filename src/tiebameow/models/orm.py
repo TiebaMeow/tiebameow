@@ -17,7 +17,7 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, foreign, mapped_column, rela
 from sqlalchemy.types import TypeDecorator, TypeEngine
 
 from ..schemas.fragments import FRAG_MAP, Fragment, FragUnknownModel
-from ..schemas.rules import Actions, ReviewRule, RuleNode, TargetType
+from ..schemas.rules import Actions, Condition, FieldType, ReviewRule, RuleGroup, RuleNode, TargetType
 from ..utils.time_utils import now_with_tz
 
 if TYPE_CHECKING:
@@ -95,6 +95,7 @@ class RuleNodeType(TypeDecorator[RuleNode]):
 
     impl = JSON
     cache_ok = True
+    _datetime_fields = {FieldType.CREATE_TIME, FieldType.LAST_TIME}
 
     def __init__(self, *args: object, **kwargs: object):
         super().__init__(*args, **kwargs)
@@ -108,12 +109,37 @@ class RuleNodeType(TypeDecorator[RuleNode]):
     def process_bind_param(self, value: RuleNode | None, dialect: Dialect) -> dict[str, Any] | None:
         if value is None:
             return None
-        return cast("dict[str, Any]", self.adapter.dump_python(value, mode="json"))
+        prepared = self._serialize_node(value)
+        return cast("dict[str, Any]", self.adapter.dump_python(prepared, mode="json"))
 
     def process_result_value(self, value: dict[str, Any] | None, dialect: Dialect) -> RuleNode | None:
         if value is None:
             return None
-        return self.adapter.validate_python(value)
+        loaded = self.adapter.validate_python(value)
+        return self._deserialize_node(loaded)
+
+    def _serialize_node(self, node: RuleNode) -> RuleNode:
+        if isinstance(node, Condition):
+            if node.field in self._datetime_fields and isinstance(node.value, datetime):
+                return node.model_copy(update={"value": node.value.isoformat()})
+            return node
+        if isinstance(node, RuleGroup):
+            converted = [self._serialize_node(child) for child in node.conditions]
+            return node.model_copy(update={"conditions": converted})
+        return node
+
+    def _deserialize_node(self, node: RuleNode) -> RuleNode:
+        if isinstance(node, Condition):
+            if node.field in self._datetime_fields and isinstance(node.value, str):
+                try:
+                    return node.model_copy(update={"value": datetime.fromisoformat(node.value)})
+                except ValueError:
+                    return node
+            return node
+        if isinstance(node, RuleGroup):
+            converted = [self._deserialize_node(child) for child in node.conditions]
+            return node.model_copy(update={"conditions": converted})
+        return node
 
 
 class ActionsType(TypeDecorator[Actions]):
