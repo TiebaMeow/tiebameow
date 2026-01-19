@@ -126,7 +126,6 @@ class RuleNodeType(TypeDecorator[RuleNode]):
         if isinstance(node, RuleGroup):
             converted = [self._serialize_node(child) for child in node.conditions]
             return node.model_copy(update={"conditions": converted})
-        return node
 
     def _deserialize_node(self, node: RuleNode) -> RuleNode:
         if isinstance(node, Condition):
@@ -139,7 +138,6 @@ class RuleNodeType(TypeDecorator[RuleNode]):
         if isinstance(node, RuleGroup):
             converted = [self._deserialize_node(child) for child in node.conditions]
             return node.model_copy(update={"conditions": converted})
-        return node
 
 
 class ActionsType(TypeDecorator[Actions]):
