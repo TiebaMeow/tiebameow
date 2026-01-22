@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import asyncio
+import socket
 import time
 from collections.abc import Awaitable, Callable
 from contextlib import AsyncExitStack, asynccontextmanager
 from functools import wraps
 from typing import TYPE_CHECKING, Any
 
+import aiohttp
 import aiotieba as tb
 from aiohttp import ClientError, ServerConnectionError, ServerTimeoutError
+from aiohttp_socks import ProxyConnector
+from aiotieba.config import ProxyConfig
+from aiotieba.core import BLCPCore, HttpCore, NetCore, WsCore
 from aiotieba.exception import BoolResponse, HTTPStatusError, IntResponse, StrResponse, TiebaServerError
 from tenacity import (
     AsyncRetrying,
@@ -40,6 +45,8 @@ if TYPE_CHECKING:
     from aiotieba.typing import Comments, Posts, Threads, UserInfo
 
     from ..models.dto import CommentsDTO, PostsDTO, ThreadsDTO, UserInfoDTO
+
+SOCKS_SCHEMES = frozenset({"socks4", "socks4a", "socks5", "socks5h"})
 
 
 class AiotiebaError(Exception):
@@ -146,7 +153,36 @@ class Client(tb.Client):  # type: ignore[misc]
         self._wait_max = wait_max
 
     async def __aenter__(self) -> Client:
-        await super().__aenter__()
+        proxy: ProxyConfig = self._proxy
+        proxy_url = proxy.url
+
+        connector: aiohttp.TCPConnector
+        if proxy_url and proxy_url.scheme in SOCKS_SCHEMES:
+            connector = ProxyConnector.from_url(
+                str(proxy_url),
+                ttl_dns_cache=self._timeout.dns_ttl,
+                family=socket.AF_INET,
+                keepalive_timeout=self._timeout.http_keepalive,
+                limit=0,
+                ssl=False,
+            )
+            proxy = ProxyConfig()
+        else:
+            connector = aiohttp.TCPConnector(
+                ttl_dns_cache=self._timeout.dns_ttl,
+                family=socket.AF_INET,
+                keepalive_timeout=self._timeout.http_keepalive,
+                limit=0,
+                ssl=False,
+            )
+
+        self._connector = connector
+
+        net_core = NetCore(connector, proxy, self._timeout)
+        self._http_core = HttpCore(self._account, net_core)
+        self._ws_core = WsCore(self._account, net_core)
+        self._blcp_core = BLCPCore(account=self._account, net_core=net_core, user=self._user)
+
         return self
 
     async def __aexit__(
@@ -155,7 +191,8 @@ class Client(tb.Client):  # type: ignore[misc]
         exc_val: BaseException | None = None,
         exc_tb: object = None,
     ) -> None:
-        await super().__aexit__(exc_type, exc_val, exc_tb)
+        await self._ws_core.close()
+        await self._connector.close()
 
     @property
     def limiter(self) -> AsyncLimiter | None:
