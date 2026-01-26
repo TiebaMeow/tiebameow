@@ -103,18 +103,34 @@ class TargetType(StrEnum):
     COMMENT = "comment"
 
 
+class FunctionCall(BaseModel):
+    """外部函数调用描述。
+
+    用于在规则条件中描述需要调用的外部函数。
+
+    Attributes:
+        name: 函数名称。
+        args: 位置参数列表。
+        kwargs: 关键字参数字典。
+    """
+
+    name: str
+    args: list[Any] = Field(default_factory=list)
+    kwargs: dict[str, Any] = Field(default_factory=dict)
+
+
 class Condition(BaseModel):
     """单个条件单元。
 
     定义了规则中的最小匹配单元，包含字段、操作符和目标值。
 
     Attributes:
-        field: 匹配字段路径，支持点号分隔的嵌套字段，如 'content', 'author.level'。
+        field: 匹配字段路径或函数调用。
         operator: 匹配操作符，支持 'contains', 'regex', 'eq', 'gt', 'lt', 'gte', 'lte', 'in'。
         value: 匹配的目标值，类型取决于操作符。
     """
 
-    field: FieldType
+    field: FieldType | FunctionCall
     operator: OperatorType
     value: Any
 

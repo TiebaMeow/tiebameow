@@ -19,6 +19,7 @@ from tiebameow.schemas.rules import (
     Condition,
     DeleteAction,
     FieldType,
+    FunctionCall,
     LogicType,
     NotifyAction,
     OperatorType,
@@ -294,3 +295,22 @@ def test_validate_trigger_compatibility() -> None:
             actions=actions,
         )
     assert "Field 'title' is not valid for target_type 'post'" in str(exc.value)
+
+
+# --- FunctionCall Tests ---
+
+
+def test_function_call_schema() -> None:
+    fc = FunctionCall(name="ocr", args=["img_url"], kwargs={"lang": "chs"})
+    assert fc.name == "ocr"
+    assert fc.args == ["img_url"]
+    assert fc.kwargs == {"lang": "chs"}
+
+
+def test_condition_with_function_call() -> None:
+    fc = FunctionCall(name="ocr", args=["img"])
+    cond = Condition(field=fc, operator=OperatorType.CONTAINS, value="bad")
+
+    assert cond.field == fc
+    assert isinstance(cond.field, FunctionCall)
+    assert cond.field.name == "ocr"

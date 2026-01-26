@@ -30,6 +30,7 @@ from tiebameow.schemas.rules import (
     Condition,
     DeleteAction,
     FieldType,
+    FunctionCall,
     LogicType,
     NotifyAction,
     OperatorType,
@@ -351,3 +352,88 @@ class TestORMMethods:
         assert out_data.fid == 10
         assert out_data.name == "test"
         assert out_data.trigger == trigger
+
+
+# --- RuleNodeType Specialized Tests ---
+
+
+class TestRuleNodeTypeWithFunctionCall:
+    def test_process_bind_param_function_call(self):
+        """测试 FunctionCall 对象的序列化"""
+        type_impl = RuleNodeType()
+        dialect = Mock()
+        dialect.name = "sqlite"  # or postgresql
+
+        # Condition containing FunctionCall
+        fc = FunctionCall(name="ocr", args=["img"], kwargs={"lang": "en"})
+        node = Condition(field=fc, operator=OperatorType.EQ, value="ok")
+
+        res_dict = type_impl.process_bind_param(node, dialect)
+
+        assert isinstance(res_dict, dict)
+        assert res_dict["field"]["name"] == "ocr"
+        assert res_dict["field"]["args"] == ["img"]
+        assert res_dict["field"]["kwargs"] == {"lang": "en"}
+        assert res_dict["operator"] == OperatorType.EQ
+        assert res_dict["value"] == "ok"
+
+    def test_process_result_value_function_call(self):
+        """测试 FunctionCall 对象的反序列化"""
+        type_impl = RuleNodeType()
+        dialect = Mock()
+        dialect.name = "sqlite"
+
+        raw_data = {
+            "field": {"name": "ocr", "args": ["img"], "kwargs": {"lang": "en"}},
+            "operator": "eq",
+            "value": "ok",
+        }
+
+        # Test loading back
+        node = type_impl.process_result_value(raw_data, dialect)
+        assert isinstance(node, Condition)
+        assert isinstance(node.field, FunctionCall)
+        assert node.field.name == "ocr"
+        assert node.field.args == ["img"]
+        assert node.field.kwargs == {"lang": "en"}
+
+    def test_process_bind_param_rule_group(self):
+        """测试 RuleGroup 对象的序列化"""
+        type_impl = RuleNodeType()
+        dialect = Mock()
+        dialect.name = "sqlite"
+
+        fc = FunctionCall(name="ocr", args=["img"])
+        c1 = Condition(field=fc, operator=OperatorType.EQ, value="ok")
+        c2 = Condition(field=FieldType.TITLE, operator=OperatorType.CONTAINS, value="hi")
+
+        group = RuleGroup(logic=LogicType.AND, conditions=[c1, c2])
+
+        res_dict = type_impl.process_bind_param(group, dialect)
+        assert isinstance(res_dict, dict)
+        assert res_dict["logic"] == LogicType.AND
+        assert len(res_dict["conditions"]) == 2
+        assert res_dict["conditions"][0]["field"]["name"] == "ocr"
+
+    def test_process_result_value_rule_group(self):
+        """测试 RuleGroup 对象的反序列化"""
+        type_impl = RuleNodeType()
+        dialect = Mock()
+        dialect.name = "sqlite"
+
+        raw_data = {
+            "logic": "AND",
+            "conditions": [
+                {"field": {"name": "ocr", "args": [], "kwargs": {}}, "operator": "eq", "value": "ok"},
+                {"field": "title", "operator": "contains", "value": "hi"},
+            ],
+        }
+
+        group = type_impl.process_result_value(raw_data, dialect)
+        assert isinstance(group, RuleGroup)
+        assert group.logic == LogicType.AND
+        assert len(group.conditions) == 2
+        assert isinstance(group.conditions[0], Condition)
+        assert isinstance(group.conditions[0].field, FunctionCall)
+        assert isinstance(group.conditions[1], Condition)
+        assert group.conditions[1].field == FieldType.TITLE

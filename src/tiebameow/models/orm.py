@@ -120,7 +120,11 @@ class RuleNodeType(TypeDecorator[RuleNode]):
 
     def _serialize_node(self, node: RuleNode) -> RuleNode:
         if isinstance(node, Condition):
-            if node.field in self._datetime_fields and isinstance(node.value, datetime):
+            if (
+                isinstance(node.field, FieldType)
+                and node.field in self._datetime_fields
+                and isinstance(node.value, datetime)
+            ):
                 return node.model_copy(update={"value": node.value.isoformat()})
             return node
         if isinstance(node, RuleGroup):
@@ -129,7 +133,11 @@ class RuleNodeType(TypeDecorator[RuleNode]):
 
     def _deserialize_node(self, node: RuleNode) -> RuleNode:
         if isinstance(node, Condition):
-            if node.field in self._datetime_fields and isinstance(node.value, str):
+            if (
+                isinstance(node.field, FieldType)
+                and node.field in self._datetime_fields
+                and isinstance(node.value, str)
+            ):
                 try:
                     return node.model_copy(update={"value": datetime.fromisoformat(node.value)})
                 except ValueError:

@@ -12,6 +12,7 @@ from tiebameow.schemas.rules import (
     BanAction,
     DeleteAction,
     FieldType,
+    FunctionCall,
     LogicType,
     NotifyAction,
     OperatorType,
@@ -399,3 +400,65 @@ class TestRuleParserEdgeCasesAndCoverage:
         with patch.object(action_parser, "parse_string", side_effect=ParseException("fail")):
             with pytest.raises(ValueError, match="Action parsing failed"):
                 parser.parse_actions("bad input", mode="dsl")
+
+    # === Function Call Tests ===
+    def test_parse_func_call_simple(self, parser: RuleEngineParser):
+        # ocr(image) contains "bad"
+        rule = 'ocr("image_url") contains "bad"'
+        node = parser.parse_rule(rule, mode="dsl")
+        assert isinstance(node, Condition)
+        assert isinstance(node.field, FunctionCall)
+        assert node.field.name == "ocr"
+        assert node.field.args == ["image_url"]
+        assert node.operator == OperatorType.CONTAINS
+        assert node.value == "bad"
+
+    def test_parse_func_call_kwargs(self, parser: RuleEngineParser):
+        # custom_check(type="image", threshold=0.9) > 0.5
+        rule = 'custom_check(type="image", threshold=0.9) > 0.5'
+        node = parser.parse_rule(rule, mode="dsl")
+        assert isinstance(node, Condition)
+        assert isinstance(node.field, FunctionCall)
+        assert node.field.name == "custom_check"
+        assert node.field.kwargs.get("type") == "image"
+        # Since using float value parser logic
+        assert node.field.kwargs.get("threshold") == 0.9
+        # operator >
+        assert node.operator == OperatorType.GT
+        assert node.value == 0.5
+
+    def test_parse_func_call_mixed_args_kwargs(self, parser: RuleEngineParser):
+        # func(1, 2, a=3, b=4) == true
+        rule = "func(1, 2, a=3, b=4) == true"
+        node = parser.parse_rule(rule, mode="dsl")
+        assert isinstance(node, Condition)
+        assert isinstance(node.field, FunctionCall)
+        assert len(node.field.args) == 2
+        assert node.field.args[0] == 1
+        assert node.field.kwargs["a"] == 3
+
+    def test_dump_func_call(self, parser: RuleEngineParser):
+        fc = FunctionCall(name="ocr", args=["img"], kwargs={"lang": "chs"})
+        cond = Condition(field=fc, operator=OperatorType.EQ, value=True)
+        dumped = parser.dump_rule(cond, mode="dsl")
+        assert dumped == 'ocr("img", lang="chs")==true'
+        parsed = parser.parse_rule(dumped, mode="dsl")
+        assert parsed == cond
+
+    def test_mixed_logic_with_func(self, parser: RuleEngineParser):
+        # (field1 == 1) OR (func() == true)
+        rule = '(reply_num > 10) OR (check_spam("text") == true)'
+        node = parser.parse_rule(rule, mode="dsl")
+        assert isinstance(node, RuleGroup)
+        assert node.logic == LogicType.OR
+        assert len(node.conditions) == 2
+
+        c1, c2 = node.conditions
+        assert isinstance(c1, Condition)
+        assert isinstance(c2, Condition)
+
+        # c1 is normal field
+        assert c1.field == FieldType.REPLY_NUM
+        # c2 is func
+        assert isinstance(c2.field, FunctionCall)
+        assert c2.field.name == "check_spam"

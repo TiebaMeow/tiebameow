@@ -14,6 +14,7 @@ from ..schemas.rules import (
     ActionType,
     Condition,
     FieldType,
+    FunctionCall,
     LogicType,
     OperatorType,
     RuleGroup,
@@ -525,6 +526,42 @@ class RuleEngineParser:
         # 忽略大小写
         return pp.Regex(regex_str, flags=re.IGNORECASE)
 
+    def _build_function_call_parser(self, cfg: LangConfig) -> pp.ParserElement:
+        """
+        构建函数调用解析器。
+
+        支持 func(arg1, arg2, key=val) 格式。
+
+        Args:
+            cfg: 当前语言配置。
+
+        Returns:
+            pp.ParserElement: 函数调用解析器。
+        """
+        identifier = pp.Word(pp.alphanums + "_")
+        value = self._build_value_parser(cfg)
+
+        LPAR = cfg.punctuation.get_parser_element(PunctuationType.LPAR)
+        RPAR = cfg.punctuation.get_parser_element(PunctuationType.RPAR)
+        ASSIGN = cfg.punctuation.get_parser_element(PunctuationType.ASSIGN)
+        COMMA = cfg.punctuation.get_parser_element(PunctuationType.COMMA)
+
+        # key=val
+        kwarg = pp.Group(identifier("key") + pp.Suppress(ASSIGN) + value("val")).set_name("kwarg")
+        # arg (just value)
+        arg = pp.Group(value("val")).set_name("arg")
+
+        # 参数列表 (arg 或 kwarg，逗号分隔)
+        param_item = kwarg | arg
+        params = pp.Optional(pp.DelimitedList(param_item, delim=COMMA))
+
+        # func_name(params)
+        # 注意: 必须显式 Group 参数列表以便后续提取
+        func_name = identifier("func_name")
+        func_call = pp.Group(func_name + pp.Suppress(LPAR) + pp.Group(params)("params") + pp.Suppress(RPAR))
+
+        return func_call
+
     def _build_trigger_grammar(self, cfg: LangConfig) -> pp.ParserElement:
         """
         构建触发器规则的语法解析器。
@@ -564,8 +601,12 @@ class RuleEngineParser:
 
         generic_identifier = self._build_identifier_parser(reserved_list)
 
-        # 优先匹配已知字段 (Strict)，解决 "内容包含" 被 Word 贪婪吞噬的问题
-        identifier = strict_field_parser | generic_identifier
+        # Function Call
+        func_call = self._build_function_call_parser(cfg)
+
+        # 优先匹配 Function Call，再匹配已知字段 (Strict)，最后 Generic
+        # 这样确保 ocr(...) 被识别为函数而不是字段 ocr
+        identifier = func_call | strict_field_parser | generic_identifier
 
         # 4. 组合 Condition: Field + Op + Value
         # Group 使得结果结构化
@@ -665,12 +706,55 @@ class RuleEngineParser:
             # 兼容处理: one_of 有时返回 list
             if isinstance(raw_op, list | pp.ParseResults):
                 raw_op = raw_op[0]
+
+            raw_op_str = str(raw_op)
+            op_enum = cfg.operators.get_enum(raw_op_str)
+            if not op_enum:
+                raise ValueError(f"Unknown operator: {raw_op}")
+
+            # 检查是否为函数调用
+            # identifier 返回的是包含 Group 结果的 ParseResults (list-like)，所以真实的 Group 在 [0]
+            func_node = raw_field
+            if (
+                isinstance(raw_field, pp.ParseResults)
+                and len(raw_field) == 1
+                and isinstance(raw_field[0], pp.ParseResults)
+            ):
+                func_node = raw_field[0]
+
+            if isinstance(func_node, pp.ParseResults) and "func_name" in func_node:
+                func_name = func_node["func_name"]
+                if isinstance(func_name, list | pp.ParseResults):
+                    func_name = func_name[0]
+                func_name = str(func_name)
+                args = []
+                kwargs = {}
+                if "params" in func_node:
+                    for item in func_node["params"]:
+                        # 简单的区分 arg 和 kwarg
+                        if "key" in item:
+                            # unwrap value if needed
+                            v = item["val"]
+                            if isinstance(v, pp.ParseResults):
+                                v = v[0]
+                            kwargs[item["key"]] = v
+                        else:
+                            v = item["val"]
+                            if isinstance(v, pp.ParseResults):
+                                v = v[0]
+                            args.append(v)
+
+                return Condition(
+                    field=FunctionCall(name=func_name, args=args, kwargs=kwargs),
+                    operator=op_enum,
+                    value=val,
+                )
+
             if isinstance(raw_field, list | pp.ParseResults):
                 raw_field = raw_field[0]
 
             # 强制转换为字符串以满足类型检查
             raw_field_str = str(raw_field)
-            raw_op_str = str(raw_op)
 
             # 映射回标准枚举
             field_enum = cfg.fields.get_enum(raw_field_str)
@@ -678,11 +762,6 @@ class RuleEngineParser:
                 # 严格模式：如果配置没覆盖到，且无法识别为标准字段，则报错
                 # 之前允许 raw_field_str 回退，现在为了安全性禁止未知字段
                 raise ValueError(f"Unknown field: {raw_field_str}")
-
-            op_enum = cfg.operators.get_enum(raw_op_str)
-            # 必须找到对应的 Op，否则可能是非法输入
-            if not op_enum:
-                raise ValueError(f"Unknown operator: {raw_op}")
 
             return Condition(field=field_enum, operator=op_enum, value=val)
 
@@ -874,14 +953,38 @@ class RuleEngineParser:
         cfg = DSL_CONFIG if mode == "dsl" else CNL_CONFIG
 
         if isinstance(node, Condition):
-            # 将 str 值转回 Enum 以查找 Token
-            try:
-                f_enum = FieldType(node.field)
-            except ValueError:
-                f_enum = None
+            if isinstance(node.field, FunctionCall):
+                call = node.field
+                arg_strs = []
+                comma = cfg.punctuation.get_primary_token(PunctuationType.COMMA) + " "
+                assign = cfg.punctuation.get_primary_token(PunctuationType.ASSIGN)
 
-            # 如果是预定义的字段，用主Token，否则原样返回
-            field_str = cfg.fields.get_primary_token(f_enum) if f_enum else node.field
+                # 简易值序列化 helper (复用下方 value 逻辑的部分简化版)
+                def dump_v(v: Any) -> str:
+                    if isinstance(v, str):
+                        return f'"{v}"'
+                    if isinstance(v, bool):
+                        return "true" if v else "false"
+                    return str(v)
+
+                arg_strs.extend([dump_v(a) for a in call.args])
+                for k, v in call.kwargs.items():
+                    arg_strs.append(f"{k}{assign}{dump_v(v)}")
+
+                params_str = comma.join(arg_strs)
+                lpar = cfg.punctuation.get_primary_token(PunctuationType.LPAR)
+                rpar = cfg.punctuation.get_primary_token(PunctuationType.RPAR)
+                field_str = f"{call.name}{lpar}{params_str}{rpar}"
+
+            else:
+                # 将 str 值转回 Enum 以查找 Token
+                try:
+                    f_enum = FieldType(node.field)
+                except ValueError:
+                    f_enum = None
+
+                # 如果是预定义的字段，用主Token，否则原样返回
+                field_str = cfg.fields.get_primary_token(f_enum) if f_enum else str(node.field)
 
             # Op 必须是规范的
             o_enum = OperatorType(node.operator)
