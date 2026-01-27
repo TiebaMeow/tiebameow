@@ -524,7 +524,8 @@ class ReviewRules(RuleBase):
         target_type: 规则作用目标类型。
         name: 规则名称。
         enabled: 是否启用。
-        priority: 优先级。
+        block: 命中后是否阻止后续规则执行。
+        priority: 优先级 1-20。
         trigger: 触发条件 JSON。
         actions: 动作列表 JSON。
         created_at: 创建时间。
@@ -550,7 +551,8 @@ class ReviewRules(RuleBase):
     )
     name: Mapped[str] = mapped_column(String, nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    block: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    priority: Mapped[int] = mapped_column(Integer, default=20, nullable=False)
     trigger: Mapped[RuleNode] = mapped_column(RuleNodeType, index=True, nullable=False)
     actions: Mapped[Actions] = mapped_column(ActionsType, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now_with_tz, nullable=False)
@@ -578,6 +580,7 @@ class ReviewRules(RuleBase):
             target_type=review_rule.target_type,
             name=review_rule.name,
             enabled=review_rule.enabled,
+            block=review_rule.block,
             priority=review_rule.priority,
             trigger=review_rule.trigger,
             actions=review_rule.actions,
@@ -598,6 +601,7 @@ class ReviewRules(RuleBase):
             target_type=self.target_type,
             name=self.name,
             enabled=self.enabled,
+            block=self.block,
             priority=self.priority,
             trigger=self.trigger,
             actions=self.actions,

@@ -337,6 +337,7 @@ class TestORMMethods:
             actions=act,
             target_type=TargetType.POST,
             enabled=True,
+            block=False,
             priority=1,
         )
 

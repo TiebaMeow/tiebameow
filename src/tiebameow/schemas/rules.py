@@ -200,7 +200,8 @@ class ReviewRule(BaseModel):
         target_type: 规则适用的目标类型，如 'all', 'thread', 'post', 'comment'。
         name: 规则名称。
         enabled: 是否启用该规则。
-        priority: 规则优先级，数字越大越先执行。
+        block: 命中后是否阻止继续匹配后续规则。
+        priority: 规则优先级，1-20，数字越小越先执行。
         trigger: 规则触发条件的逻辑树根节点。
         actions: 规则命中后执行的动作配置。
     """
@@ -212,7 +213,8 @@ class ReviewRule(BaseModel):
     target_type: TargetType
     name: str
     enabled: bool
-    priority: int
+    block: bool
+    priority: int = Field(ge=1, le=20)
     trigger: RuleNode
     actions: Actions
 

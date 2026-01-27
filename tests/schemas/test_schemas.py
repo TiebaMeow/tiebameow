@@ -161,6 +161,7 @@ def test_review_rule_model() -> None:
         target_type=TargetType.ALL,
         name="test rule",
         enabled=True,
+        block=False,
         priority=10,
         trigger=cond,
         actions=actions,
@@ -183,6 +184,7 @@ def test_review_rule_target_type() -> None:
         target_type=TargetType.POST,
         name="test rule",
         enabled=True,
+        block=False,
         priority=10,
         trigger=cond,
         actions=actions,
@@ -203,6 +205,7 @@ def test_validate_trigger_compatibility() -> None:
         target_type=TargetType.THREAD,
         name="thread rule",
         enabled=True,
+        block=False,
         priority=10,
         trigger=cond_thread,
         actions=actions,
@@ -219,6 +222,7 @@ def test_validate_trigger_compatibility() -> None:
             target_type=TargetType.POST,
             name="post rule",
             enabled=True,
+            block=False,
             priority=10,
             trigger=cond_thread,
             actions=actions,
@@ -236,6 +240,7 @@ def test_validate_trigger_compatibility() -> None:
             target_type=TargetType.COMMENT,
             name="comment rule",
             enabled=True,
+            block=False,
             priority=10,
             trigger=cond_reply,
             actions=actions,
@@ -252,6 +257,7 @@ def test_validate_trigger_compatibility() -> None:
         target_type=TargetType.COMMENT,
         name="common rule",
         enabled=True,
+        block=False,
         priority=10,
         trigger=cond_common,
         actions=actions,
@@ -267,6 +273,7 @@ def test_validate_trigger_compatibility() -> None:
             target_type=TargetType.ALL,
             name="all rule",
             enabled=True,
+            block=False,
             priority=10,
             trigger=cond_thread,
             actions=actions,
@@ -290,6 +297,7 @@ def test_validate_trigger_compatibility() -> None:
             target_type=TargetType.POST,
             name="nested rule",
             enabled=True,
+            block=False,
             priority=10,
             trigger=group_invalid,
             actions=actions,
@@ -314,3 +322,90 @@ def test_condition_with_function_call() -> None:
     assert cond.field == fc
     assert isinstance(cond.field, FunctionCall)
     assert cond.field.name == "ocr"
+
+
+def test_review_rule_priority_validation() -> None:
+    cond = Condition(field=FieldType.TEXT, operator=OperatorType.CONTAINS, value="test")
+    actions = Actions()
+
+    # Valid priority
+    ReviewRule(
+        id=1,
+        fid=1,
+        forum_rule_id=1,
+        uploader_id=1,
+        target_type=TargetType.ALL,
+        name="valid",
+        enabled=True,
+        block=False,
+        priority=1,
+        trigger=cond,
+        actions=actions,
+    )
+    ReviewRule(
+        id=1,
+        fid=1,
+        forum_rule_id=1,
+        uploader_id=1,
+        target_type=TargetType.ALL,
+        name="valid",
+        enabled=True,
+        block=False,
+        priority=20,
+        trigger=cond,
+        actions=actions,
+    )
+
+    # Invalid priority < 1
+    with pytest.raises(ValidationError) as exc:
+        ReviewRule(
+            id=1,
+            fid=1,
+            forum_rule_id=1,
+            uploader_id=1,
+            target_type=TargetType.ALL,
+            name="invalid",
+            enabled=True,
+            block=False,
+            priority=0,
+            trigger=cond,
+            actions=actions,
+        )
+    # Pydantic 2 error message might vary, checking keyword part of standard message
+    assert "Input should be greater than or equal to 1" in str(exc.value)
+
+    # Invalid priority > 20
+    with pytest.raises(ValidationError) as exc:
+        ReviewRule(
+            id=1,
+            fid=1,
+            forum_rule_id=1,
+            uploader_id=1,
+            target_type=TargetType.ALL,
+            name="invalid",
+            enabled=True,
+            block=False,
+            priority=21,
+            trigger=cond,
+            actions=actions,
+        )
+    assert "Input should be less than or equal to 20" in str(exc.value)
+
+
+def test_review_rule_block_field() -> None:
+    cond = Condition(field=FieldType.TEXT, operator=OperatorType.CONTAINS, value="test")
+    actions = Actions()
+    rule = ReviewRule(
+        id=1,
+        fid=1,
+        forum_rule_id=1,
+        uploader_id=1,
+        target_type=TargetType.ALL,
+        name="block test",
+        enabled=True,
+        block=True,
+        priority=10,
+        trigger=cond,
+        actions=actions,
+    )
+    assert rule.block is True
