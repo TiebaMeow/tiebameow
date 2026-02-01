@@ -4,6 +4,7 @@ import math
 from datetime import datetime, timedelta
 from unittest.mock import patch
 
+import pyparsing as pp
 import pytest
 
 from tiebameow.parser.rule_parser import DSL_CONFIG, Condition, RuleEngineParser, RuleGroup, TokenMap
@@ -356,6 +357,37 @@ class TestRuleParserEdgeCasesAndCoverage:
         assert node.field == FieldType.TITLE
         assert node.operator == OperatorType.EQ
 
+    def test_to_rule_node_parse_results_val_single(self, parser: RuleEngineParser):
+        item = {"field": "title", "op": "==", "val": pp.ParseResults(["x"])}
+        node = parser._to_rule_node(item, DSL_CONFIG)
+        assert isinstance(node, Condition)
+        assert node.value == "x"
+
+    def test_to_rule_node_legacy_func_parse_results(self, parser: RuleEngineParser):
+        func_node = pp.ParseResults([])
+        func_node["func_name"] = pp.ParseResults(["legacy_func"])
+        arg_item = pp.ParseResults([])
+        arg_item["val"] = pp.ParseResults([1])
+        kw_item = pp.ParseResults([])
+        kw_item["key"] = "k"
+        kw_item["val"] = pp.ParseResults([2])
+        func_node["params"] = [arg_item, kw_item]
+        raw_field = pp.ParseResults([func_node])
+
+        item = {"field": raw_field, "op": "==", "val": "ok"}
+        node = parser._to_rule_node(item, DSL_CONFIG)
+        assert isinstance(node, Condition)
+        assert isinstance(node.field, FunctionCall)
+        assert node.field.name == "legacy_func"
+        assert node.field.args == [1]
+        assert node.field.kwargs == {"k": 2}
+
+    def test_to_rule_node_raw_field_list_fallback(self, parser: RuleEngineParser):
+        item = {"field": ["title", "ignored"], "op": "==", "val": "a"}
+        node = parser._to_rule_node(item, DSL_CONFIG)
+        assert isinstance(node, Condition)
+        assert node.field == FieldType.TITLE
+
     def test_to_rule_node_unknown_logic(self, parser):
         item1 = {"field": "title", "op": "==", "val": "a"}
         item2 = {"field": "title", "op": "==", "val": "b"}
@@ -462,3 +494,61 @@ class TestRuleParserEdgeCasesAndCoverage:
         # c2 is func
         assert isinstance(c2.field, FunctionCall)
         assert c2.field.name == "check_spam"
+
+    def test_parse_nested_func_call_args(self, parser: RuleEngineParser):
+        # outer(inner("x"), 2) == true
+        rule = 'outer(inner("x"), 2) == true'
+        node = parser.parse_rule(rule, mode="dsl")
+        assert isinstance(node, Condition)
+        assert isinstance(node.field, FunctionCall)
+        assert node.field.name == "outer"
+        assert len(node.field.args) == 2
+        nested = node.field.args[0]
+        assert isinstance(nested, FunctionCall)
+        assert nested.name == "inner"
+        assert nested.args == ["x"]
+        assert node.operator == OperatorType.EQ
+        assert node.value is True
+
+    def test_parse_nested_func_call_kwargs(self, parser: RuleEngineParser):
+        # outer(a=inner("x"), b=1) == true
+        rule = 'outer(a=inner("x"), b=1) == true'
+        node = parser.parse_rule(rule, mode="dsl")
+        assert isinstance(node, Condition)
+        assert isinstance(node.field, FunctionCall)
+        assert node.field.name == "outer"
+        nested = node.field.kwargs.get("a")
+        assert isinstance(nested, FunctionCall)
+        assert nested.name == "inner"
+        assert nested.args == ["x"]
+        assert node.field.kwargs.get("b") == 1
+
+    def test_dump_func_call_nested(self, parser: RuleEngineParser):
+        inner_fc = FunctionCall(name="inner", args=["x"])
+        outer_fc = FunctionCall(name="outer", args=[inner_fc, 2])
+        cond = Condition(field=outer_fc, operator=OperatorType.EQ, value=True)
+        dumped = parser.dump_rule(cond, mode="dsl")
+        assert dumped == 'outer(inner("x"), 2)==true'
+        parsed = parser.parse_rule(dumped, mode="dsl")
+        assert parsed == cond
+
+    def test_dump_func_call_nested_kwargs_and_bool(self, parser: RuleEngineParser):
+        inner_fc = FunctionCall(name="inner", kwargs={"k": "v"})
+        outer_fc = FunctionCall(name="outer", args=[inner_fc, True])
+        cond = Condition(field=outer_fc, operator=OperatorType.EQ, value=True)
+        dumped = parser.dump_rule(cond, mode="dsl")
+        assert dumped == 'outer(inner(k="v"), true)==true'
+
+    def test_dump_rule_list_datetime_item(self, parser: RuleEngineParser):
+        dt = datetime(2023, 1, 1, 12, 0, 0)
+        cond = Condition(field=FieldType.TITLE, operator=OperatorType.IN, value=[dt])
+        dumped = parser.dump_rule(cond, mode="dsl")
+        assert "2023-01-01 12:00:00" in dumped
+
+    def test_dump_rule_not_group(self, parser: RuleEngineParser):
+        node = RuleGroup(
+            logic=LogicType.NOT,
+            conditions=[Condition(field=FieldType.TITLE, operator=OperatorType.CONTAINS, value="x")],
+        )
+        dumped = parser.dump_rule(node, mode="dsl")
+        assert dumped == 'NOT (titlecontains"x")'

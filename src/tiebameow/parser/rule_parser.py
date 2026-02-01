@@ -484,15 +484,19 @@ class RuleEngineParser:
         rbrack = cfg.punctuation.get_parser_element(PunctuationType.RBRACK, caseless=True)
         comma = cfg.punctuation.get_parser_element(PunctuationType.COMMA, caseless=True)
 
+        # 支持嵌套函数调用：值解析器需要 Forward 以允许递归
+        value: pp.Forward = pp.Forward()
+
+        # Function Call (允许作为值或嵌套参数)
+        func_call = self._build_function_call_parser(cfg, value)
+
         # boolean 必须放在 quoted_str 之前，或者作为独立分支
-        list_val = (
-            pp.Suppress(lbrack)
-            + pp.DelimitedList(boolean | datetime_expr | quoted_str | number, delim=comma)
-            + pp.Suppress(rbrack)
-        )
+        list_val = pp.Suppress(lbrack) + pp.DelimitedList(value, delim=comma) + pp.Suppress(rbrack)
         list_val.set_parse_action(lambda t: [t.as_list()])
 
-        return list_val | boolean | datetime_expr | quoted_str | number
+        value <<= list_val | boolean | datetime_expr | quoted_str | number | func_call
+
+        return value
 
     def _build_identifier_parser(self, reserved_words: list[str]) -> pp.ParserElement:
         """
@@ -526,7 +530,7 @@ class RuleEngineParser:
         # 忽略大小写
         return pp.Regex(regex_str, flags=re.IGNORECASE)
 
-    def _build_function_call_parser(self, cfg: LangConfig) -> pp.ParserElement:
+    def _build_function_call_parser(self, cfg: LangConfig, value: pp.ParserElement) -> pp.ParserElement:
         """
         构建函数调用解析器。
 
@@ -539,8 +543,6 @@ class RuleEngineParser:
             pp.ParserElement: 函数调用解析器。
         """
         identifier = pp.Word(pp.alphanums + "_")
-        value = self._build_value_parser(cfg)
-
         LPAR = cfg.punctuation.get_parser_element(PunctuationType.LPAR)
         RPAR = cfg.punctuation.get_parser_element(PunctuationType.RPAR)
         ASSIGN = cfg.punctuation.get_parser_element(PunctuationType.ASSIGN)
@@ -559,6 +561,33 @@ class RuleEngineParser:
         # 注意: 必须显式 Group 参数列表以便后续提取
         func_name = identifier("func_name")
         func_call = pp.Group(func_name + pp.Suppress(LPAR) + pp.Group(params)("params") + pp.Suppress(RPAR))
+
+        def to_function_call(t: pp.ParseResults) -> FunctionCall:
+            func_group = cast("pp.ParseResults", t[0])
+            func_name_val = func_group.get("func_name")
+            if func_name_val is None:
+                raise ValueError("Missing func_name in function call")  # pragma: no cover
+            if isinstance(func_name_val, list | pp.ParseResults):  # pragma: no cover
+                func_name_val = func_name_val[0]
+            name = str(func_name_val)
+
+            args: list[Any] = []
+            kwargs: dict[str, Any] = {}
+
+            params = func_group.get("params", [])
+            if params:
+                for item in params:
+                    v = item["val"]
+                    if isinstance(v, pp.ParseResults):  # pragma: no cover
+                        v = v[0]
+                    if "key" in item:
+                        kwargs[str(item["key"])] = v
+                    else:
+                        args.append(v)
+
+            return FunctionCall(name=name, args=args, kwargs=kwargs)
+
+        func_call.set_parse_action(to_function_call)
 
         return func_call
 
@@ -602,7 +631,7 @@ class RuleEngineParser:
         generic_identifier = self._build_identifier_parser(reserved_list)
 
         # Function Call
-        func_call = self._build_function_call_parser(cfg)
+        func_call = self._build_function_call_parser(cfg, value)
 
         # 优先匹配 Function Call，再匹配已知字段 (Strict)，最后 Generic
         # 这样确保 ocr(...) 被识别为函数而不是字段 ocr
@@ -703,6 +732,18 @@ class RuleEngineParser:
                 if len(val) == 1:
                     val = val[0]
 
+            # 预先解包单元素 list，方便识别 FunctionCall
+            if isinstance(raw_field, list) and len(raw_field) == 1:
+                raw_field = raw_field[0]
+
+            # 兼容 ParseResults 中包裹的 FunctionCall
+            if (
+                isinstance(raw_field, pp.ParseResults)
+                and len(raw_field) == 1
+                and isinstance(raw_field[0], FunctionCall)
+            ):
+                raw_field = raw_field[0]
+
             # 兼容处理: one_of 有时返回 list
             if isinstance(raw_op, list | pp.ParseResults):
                 raw_op = raw_op[0]
@@ -713,7 +754,14 @@ class RuleEngineParser:
                 raise ValueError(f"Unknown operator: {raw_op}")
 
             # 检查是否为函数调用
-            # identifier 返回的是包含 Group 结果的 ParseResults (list-like)，所以真实的 Group 在 [0]
+            if isinstance(raw_field, FunctionCall):
+                return Condition(
+                    field=raw_field,
+                    operator=op_enum,
+                    value=val,
+                )
+
+            # 兼容旧的 ParseResults 结构
             func_node = raw_field
             if (
                 isinstance(raw_field, pp.ParseResults)
@@ -961,6 +1009,15 @@ class RuleEngineParser:
 
                 # 简易值序列化 helper (复用下方 value 逻辑的部分简化版)
                 def dump_v(v: Any) -> str:
+                    if isinstance(v, FunctionCall):
+                        inner_args: list[str] = []
+                        inner_args.extend([dump_v(a) for a in v.args])
+                        for k, val in v.kwargs.items():
+                            inner_args.append(f"{k}{assign}{dump_v(val)}")
+                        inner_params = comma.join(inner_args)
+                        lpar = cfg.punctuation.get_primary_token(PunctuationType.LPAR)
+                        rpar = cfg.punctuation.get_primary_token(PunctuationType.RPAR)
+                        return f"{v.name}{lpar}{inner_params}{rpar}"
                     if isinstance(v, str):
                         return f'"{v}"'
                     if isinstance(v, bool):

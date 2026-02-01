@@ -115,8 +115,8 @@ class FunctionCall(BaseModel):
     """
 
     name: str
-    args: list[Any] = Field(default_factory=list)
-    kwargs: dict[str, Any] = Field(default_factory=dict)
+    args: list[FunctionCall | Any] = Field(default_factory=list)
+    kwargs: dict[str, FunctionCall | Any] = Field(default_factory=dict)
 
 
 class Condition(BaseModel):
