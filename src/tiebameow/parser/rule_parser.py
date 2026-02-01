@@ -564,7 +564,7 @@ class RuleEngineParser:
 
         def to_function_call(t: pp.ParseResults) -> FunctionCall:
             func_group = cast("pp.ParseResults", t[0])
-            func_name_val = func_group.get("func_name")
+            func_name_val = func_group.get("func_name")  # type: ignore
             if func_name_val is None:
                 raise ValueError("Missing func_name in function call")  # pragma: no cover
             if isinstance(func_name_val, list | pp.ParseResults):  # pragma: no cover
@@ -574,7 +574,7 @@ class RuleEngineParser:
             args: list[Any] = []
             kwargs: dict[str, Any] = {}
 
-            params = func_group.get("params", [])
+            params = func_group.get("params", [])  # type: ignore
             if params:
                 for item in params:
                     v = item["val"]
