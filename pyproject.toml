@@ -7,7 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "aiohttp-socks>=0.11.0",
     "aiolimiter>=1.2.1",
-    "aiotieba>=4.6.1",
+    "aiotieba>=4.6.2",
     "httpx>=0.28.1",
     "loguru>=0.7.3",
     "pydantic>=2.12.5",

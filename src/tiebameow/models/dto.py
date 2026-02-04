@@ -155,8 +155,8 @@ class ThreadUserDTO(BaseUserDTO):
     is_vip: bool
     is_god: bool
 
-    priv_like: Literal["PUBLIC", "FRIEND", "HIDE"]
-    priv_reply: Literal["ALL", "FANS", "FOLLOW"]
+    priv_like: Literal["PUBLIC", "FRIEND", "HIDE", "UNKNOWN"]
+    priv_reply: Literal["ALL", "FANS", "FOLLOW", "UNKNOWN"]
 
 
 class PostUserDTO(BaseUserDTO):
@@ -171,8 +171,8 @@ class PostUserDTO(BaseUserDTO):
     is_vip: bool
     is_god: bool
 
-    priv_like: Literal["PUBLIC", "FRIEND", "HIDE"]
-    priv_reply: Literal["ALL", "FANS", "FOLLOW"]
+    priv_like: Literal["PUBLIC", "FRIEND", "HIDE", "UNKNOWN"]
+    priv_reply: Literal["ALL", "FANS", "FOLLOW", "UNKNOWN"]
 
 
 class CommentUserDTO(BaseUserDTO):
@@ -185,8 +185,8 @@ class CommentUserDTO(BaseUserDTO):
     is_vip: bool
     is_god: bool
 
-    priv_like: Literal["PUBLIC", "FRIEND", "HIDE"]
-    priv_reply: Literal["ALL", "FANS", "FOLLOW"]
+    priv_like: Literal["PUBLIC", "FRIEND", "HIDE", "UNKNOWN"]
+    priv_reply: Literal["ALL", "FANS", "FOLLOW", "UNKNOWN"]
 
 
 class UserInfoDTO(BaseUserDTO):
@@ -209,8 +209,8 @@ class UserInfoDTO(BaseUserDTO):
     is_god: bool
     is_blocked: bool
 
-    priv_like: Literal["PUBLIC", "FRIEND", "HIDE"]
-    priv_reply: Literal["ALL", "FANS", "FOLLOW"]
+    priv_like: Literal["PUBLIC", "FRIEND", "HIDE", "UNKNOWN"]
+    priv_reply: Literal["ALL", "FANS", "FOLLOW", "UNKNOWN"]
 
 
 class BaseThreadDTO(BaseDTO):
