@@ -55,6 +55,7 @@ uv run playwright install chromium-headless-shell
 
 ```python
 from tiebameow.client import Client
+
 async with Client() as client:
     user_info = await client.get_user_info("some_username")
 ```
@@ -63,6 +64,7 @@ async with Client() as client:
 
 ```python
 from tiebameow.client import HTTPXClient
+
 response = await HTTPXClient.get("https://example.com")
 ```
 
@@ -75,6 +77,7 @@ response = await HTTPXClient.get("https://example.com")
 ```python
 from tiebameow.parser import convert_aiotieba_thread
 from tiebameow.client import Client
+
 async with Client() as client:
     threads = await client.get_threads("some_tieba")
     for thread in threads:
@@ -87,6 +90,7 @@ async with Client() as client:
 
 ```python
 from tiebameow.parser import RuleEngineParser
+
 parser = RuleEngineParser()
 rule_node = parser.parse_rule("(title contains 'A' AND title contains 'B') OR NOT title contains 'C'")
 actions = parser.parse_actions("DO: delete(reason='spam content'), ban(days=1)")
@@ -96,6 +100,7 @@ actions = parser.parse_actions("DO: delete(reason='spam content'), ban(days=1)")
 
 ```python
 from tiebameow.renderer import Renderer
+
 async with Renderer() as renderer:
     image_bytes = await renderer.text_to_image("Hello, World!")
 ```
